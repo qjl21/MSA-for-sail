@@ -1,0 +1,8 @@
+# Runtime dependencies for fmha_ppu (csrc JIT layer).
+# A PPU toolchain (hgcc) and a PPU device are required at runtime.
+
+# Core
+torch
+apache-tvm-ffi
+jinja2
+ninja

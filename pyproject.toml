@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fmha_ppu"
+version = "0.1.1"
+description = "MSA — MiniMax Sparse Attention: dense FlashAttention + sparse top-k indexer (csrc JIT) for the PPU (HGGC)"
+readme = "README.md"
+requires-python = ">=3.10"
+# SPDX-License-Identifier: MIT
+license = { text = "MIT" }
+authors = [{ name = "MiniMax" }, { name = "T-Head (Shanghai) Semiconductor Co., Ltd." }]
+dependencies = [
+    "torch",
+    "apache-tvm-ffi",
+    "jinja2",
+    "ninja",
+]
+
+[project.urls]
+
+# The Python package lives under python/. Kernel sources ship as package data
+# and work from both editable and wheel installs: the csrc/ kernels are
+# JIT-compiled at runtime (python/fmha_ppu/jit.py), and the kernel sources,
+# Jinja templates, and vendored ACTLIZE headers live inside the package
+# directory so that JIT can locate them via __file__.
+[tool.setuptools]
+package-dir = { "" = "python" }
+license-files = ["LICENSE", "NOTICE", "THIRD-PARTY-NOTICES"]
+packages = ["fmha_ppu"]
+
+[tool.setuptools.package-data]
+fmha_ppu = [
+    "csrc/**/*",
+    # glob patterns skip dot directories, so the hidden .ppu_compat/ shim
+    # headers need an explicit entry to land in the wheel.
+    "csrc/.ppu_compat/*",
+    "actlize/include/**/*",
+]

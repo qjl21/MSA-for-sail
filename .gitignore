@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets — never commit credentials or keys
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+.credentials*
+.netrc
+.pypirc
+*.token
+
+# Compiled / JIT artifacts
+*.so
+*.o
+*.cubin
+*.ptx
+
+# Caches
+.pytest_cache/
+.benchmarks/
+.cache/
+.ruff_cache/
+.mypy_cache/
+
+# Test / coverage output
+.coverage
+.coverage.*
+htmlcov/
+
+# Profiling
+*.ncu-rep
+*.nsys-rep
+log/
+profiles/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+tests/logs/
