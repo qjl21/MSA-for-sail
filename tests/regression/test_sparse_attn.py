@@ -13,7 +13,9 @@ import torch
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from conftest import fp8_test_dtypes
 from fmha_ppu import fmha_ppu
 from fmha_ppu import fmha_ppu_plan
 
@@ -223,7 +225,8 @@ def _run_sparse_varlen(name, seed, batch_size, num_kv_heads, num_qo_heads,
 if __name__ == "__main__":
 
     all_pass = True
-    dtypes = [torch.bfloat16, torch.float8_e4m3fn]
+    # Sparse FP8 is PPU0015-only (static_assert on __HGGC_ARCH__ == 150).
+    dtypes = fp8_test_dtypes(torch.bfloat16, torch.float8_e4m3fn)
 
     print("=== 1. Basic varlen + random offsets ===")
     for dt in dtypes:
