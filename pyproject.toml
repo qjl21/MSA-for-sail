@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=64", "wheel"]
+requires = ["setuptools>=64", "wheel", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "fmha_ppu"
-version = "0.1.1"
+dynamic = ["version"]
 description = "MSA — MiniMax Sparse Attention: dense FlashAttention + sparse top-k indexer (csrc JIT) for the PPU (HGGC)"
 readme = "README.md"
 requires-python = ">=3.10"
