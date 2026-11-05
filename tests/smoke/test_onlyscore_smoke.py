@@ -13,7 +13,9 @@ import torch
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from conftest import fp8_test_dtypes
 from fmha_ppu import fmha_ppu, fmha_ppu_plan, sparse_topk_select
 
 
@@ -226,9 +228,10 @@ if __name__ == "__main__":
     parser.add_argument("--page-size", type=int, default=128)
     parser.add_argument("--head-dim", type=int, default=128)
     parser.add_argument("--dtype", dest="storage_dtype", default="bf16",
-                        choices=["bf16", "fp8"],
+                        choices=["bf16", "fp8"] if torch.float8_e4m3fn in
+                        fp8_test_dtypes(torch.float8_e4m3fn) else ["bf16"],
                         help="Q/K/V storage dtype: fp8=float8_e4m3fn "
-                             "(fp8 OnlyScore path).")
+                             "(fp8 OnlyScore path). fp8 is PPU0015-only.")
     parser.add_argument("--max-score-dtype", default="float32",
                         choices=["float32", "bf16"],
                         help="max_score output dtype: bf16 selects the "

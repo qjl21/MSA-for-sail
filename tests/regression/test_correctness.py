@@ -22,7 +22,9 @@ import threading
 import torch
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from conftest import fp8_test_dtypes
 from fmha_ppu import fmha_ppu as _fmha_ppu
 from fmha_ppu import fmha_ppu_plan
 
@@ -1558,7 +1560,7 @@ def main():
             # as the canonical regression guard for that bug.
             (64,  8, 8192, 16,  4,  8),
         ]
-        for dtype in [torch.bfloat16, torch.float8_e4m3fn]:
+        for dtype in fp8_test_dtypes(torch.bfloat16, torch.float8_e4m3fn):
             for page_size in page_sizes:
                 for b, q, k, hq, hk, kbn in sparse_decode_cases:
                     try:
@@ -1580,7 +1582,7 @@ def main():
             (1, 1024, 8192, 32, 8, 32),
             (2, 256,  4096,  8, 2,  8),
         ]
-        for dtype in [torch.bfloat16, torch.float8_e4m3fn]:
+        for dtype in fp8_test_dtypes(torch.bfloat16, torch.float8_e4m3fn):
             for page_size in page_sizes:
                 for b, q, k, hq, hk, kbn in sparse_prefill_cases:
                     try:

@@ -41,7 +41,9 @@ import torch
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from conftest import fp8_test_dtypes
 from fmha_ppu import fmha_ppu, fmha_ppu_plan
 from fmha_ppu import sparse_topk_select
 
@@ -268,7 +270,7 @@ def _run_proxy_kv_e2e(name, seed, total_qo_len, num_kv_heads_real,
 if __name__ == "__main__":
     all_pass = True
 
-    for dtype in (torch.bfloat16, torch.float8_e4m3fn):
+    for dtype in fp8_test_dtypes(torch.bfloat16, torch.float8_e4m3fn):
         print(f"\n=== dtype: {dtype} ===")
         print("=== Group A: small max_k_tiles → Filtered single-CTA path ===")
         print("  (qo_offset_prefix=256 → kv_len ~ 256+T → max_k_tiles=128)\n")

@@ -19,7 +19,9 @@ from pathlib import Path
 from functools import partial
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from conftest import fp8_test_dtypes
 from fmha_ppu import fmha_ppu as _fmha_ppu
 from fmha_ppu import fmha_ppu_plan
 
@@ -318,7 +320,8 @@ def _run_case_paged_maxscore(b, q_len, k_len, h_q, h_k, d, dtype, page_size=128,
 def main():
     all_pass = True
 
-    dtype_list = [torch.bfloat16, torch.float8_e4m3fn]
+    # OnlyScore does not require fp8 on PPU0010 (810E); it is not validated there.
+    dtype_list = fp8_test_dtypes(torch.bfloat16, torch.float8_e4m3fn)
     split_list = [-1, 2, 4]
 
     # --- Prefill tests (TILE_Q=256 path, q_len > 128) ---
