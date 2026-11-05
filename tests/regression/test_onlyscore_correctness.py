@@ -94,7 +94,8 @@ def check_maxscore(name, max_score, ref, log=True):
     rv = ref[valid].float()
     if max_score.dtype == torch.bfloat16:
         rv = rv.to(torch.bfloat16).float()
-        ulp = torch.exp2(torch.floor(torch.log2(rv.abs().clamp_min(1e-30))) - 7)
+        # Use pow(2, x): torch.exp2 fails to JIT-compile on PPU.
+        ulp = torch.pow(2.0, torch.floor(torch.log2(rv.abs().clamp_min(1e-30))) - 7)
         diff = (kv - rv).abs()
         passed = bool((diff <= ulp.clamp_min(1e-2)).all())
     else:
