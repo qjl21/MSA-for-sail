@@ -21,8 +21,10 @@ import random
 import torch
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fmha_ppu import fmha_ppu, fmha_ppu_plan
+from ref_attn import sdpa_ref_new
 
 
 def sdpa_ref(q_bf16, k_bf16, v_bf16, h_q, h_k, causal=True, qo_offset=None):
@@ -162,7 +164,7 @@ def test_override_plan_no_causal_override_causal():
     v = v_bf16.reshape(b * k_len, h_k, d)
 
     # Reference: SDPA with the real offset
-    o_ref = sdpa_ref(q_bf16, k_bf16, v_bf16, h_q, h_k, causal=True, qo_offset=real_offset)
+    o_ref = sdpa_ref_new(q_bf16, k_bf16, v_bf16, h_q, h_k, causal=True, qo_offset=real_offset)
 
     qo_lens = torch.full((b,), q_len, dtype=torch.int32)
     kv_lens = torch.full((b,), k_len, dtype=torch.int32)
@@ -198,7 +200,7 @@ def test_override_tighter_offset():
     k = k_bf16.reshape(b * k_len, h_k, d)
     v = v_bf16.reshape(b * k_len, h_k, d)
 
-    o_ref = sdpa_ref(q_bf16, k_bf16, v_bf16, h_q, h_k, causal=True, qo_offset=real_offset)
+    o_ref = sdpa_ref_new(q_bf16, k_bf16, v_bf16, h_q, h_k, causal=True, qo_offset=real_offset)
 
     qo_lens = torch.full((b,), q_len, dtype=torch.int32)
     kv_lens = torch.full((b,), k_len, dtype=torch.int32)
@@ -231,7 +233,7 @@ def test_override_none():
     k = k_bf16.reshape(b * k_len, h_k, d)
     v = v_bf16.reshape(b * k_len, h_k, d)
 
-    o_ref = sdpa_ref(q_bf16, k_bf16, v_bf16, h_q, h_k, causal=True,
+    o_ref = sdpa_ref_new(q_bf16, k_bf16, v_bf16, h_q, h_k, causal=True,
                      qo_offset=offset_val)
 
     qo_lens = torch.full((b,), q_len, dtype=torch.int32)
@@ -268,7 +270,7 @@ def test_override_split_prefill_decode():
         qi = torch.randn(1, ql, h_q, d, dtype=torch.bfloat16, device=device)
         ki = torch.randn(1, kl, h_k, d, dtype=torch.bfloat16, device=device)
         vi = torch.randn(1, kl, h_k, d, dtype=torch.bfloat16, device=device)
-        o_ref_i = sdpa_ref(qi, ki, vi, h_q, h_k, causal=True, qo_offset=off)
+        o_ref_i = sdpa_ref_new(qi, ki, vi, h_q, h_k, causal=True, qo_offset=off)
         q_list.append(qi.reshape(ql, h_q, d))
         k_list.append(ki.reshape(kl, h_k, d))
         v_list.append(vi.reshape(kl, h_k, d))
@@ -311,7 +313,7 @@ def test_override_split_prefill_decode():
         qi = q_list[i].reshape(1, ql, h_q, d)
         ki = k_list[i].reshape(1, kl, h_k, d)
         vi = v_list[i].reshape(1, kl, h_k, d)
-        o_ref_uniform_list.append(sdpa_ref(qi, ki, vi, h_q, h_k, causal=True, qo_offset=max_offset))
+        o_ref_uniform_list.append(sdpa_ref_new(qi, ki, vi, h_q, h_k, causal=True, qo_offset=max_offset))
     o_ref_uniform = torch.cat(o_ref_uniform_list, dim=0)
 
     torch.cuda.synchronize()
@@ -352,7 +354,7 @@ def test_override_varlen_per_batch():
         qi = torch.randn(1, ql, h_q, d, dtype=torch.bfloat16, device=device)
         ki = torch.randn(1, kl, h_k, d, dtype=torch.bfloat16, device=device)
         vi = torch.randn(1, kl, h_k, d, dtype=torch.bfloat16, device=device)
-        o_ref_i = sdpa_ref(qi, ki, vi, h_q, h_k, causal=True, qo_offset=off)
+        o_ref_i = sdpa_ref_new(qi, ki, vi, h_q, h_k, causal=True, qo_offset=off)
         q_list.append(qi.reshape(ql, h_q, d))
         k_list.append(ki.reshape(kl, h_k, d))
         v_list.append(vi.reshape(kl, h_k, d))
@@ -397,7 +399,7 @@ def test_override_decode():
     k = k_bf16.reshape(b * k_len, h_k, d)
     v = v_bf16.reshape(b * k_len, h_k, d)
 
-    o_ref = sdpa_ref(q_bf16, k_bf16, v_bf16, h_q, h_k, causal=True,
+    o_ref = sdpa_ref_new(q_bf16, k_bf16, v_bf16, h_q, h_k, causal=True,
                      qo_offset=real_offset)
 
     qo_lens = torch.full((b,), q_len, dtype=torch.int32)

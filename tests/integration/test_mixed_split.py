@@ -14,14 +14,19 @@ import sys
 import torch
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fmha_ppu.api import fmha_ppu_plan, fmha_ppu, _fmha_ppu_plan, _fmha_ppu
+from ref_attn import sdpa_ref_new
 
 failed_cases = []
 
 
 def sdpa_ref_varlen(q, k, v, qo_lens, kv_lens, h_q, h_k, qo_offset=None):
     """Per-batch SDPA reference for variable-length packed inputs.
+
+    Kept for reference; the tests use sdpa_ref_varlen_new below because SDPA
+    can hang on PPU.
 
     Args:
         q: [total_qo, h_q, d]
@@ -54,6 +59,29 @@ def sdpa_ref_varlen(q, k, v, qo_lens, kv_lens, h_q, h_k, qo_offset=None):
             o_i = torch.nn.functional.scaled_dot_product_attention(
                 q_i, k_i, v_i, attn_mask=mask)
         results.append(o_i.transpose(1, 2).reshape(ql, h_q, d))
+
+        qo_off += ql
+        kv_off += kl
+
+    return torch.cat(results, dim=0)
+
+
+def sdpa_ref_varlen_new(q, k, v, qo_lens, kv_lens, h_q, h_k, qo_offset=None):
+    """Per-batch matmul + softmax reference for variable-length packed inputs.
+
+    Same arguments and output layout as sdpa_ref_varlen, but without SDPA.
+    """
+    results = []
+    qo_off, kv_off = 0, 0
+
+    for i, (ql, kl) in enumerate(zip(qo_lens, kv_lens)):
+        q_i = q[qo_off:qo_off + ql].unsqueeze(0)  # [1, ql, h_q, d]
+        k_i = k[kv_off:kv_off + kl].unsqueeze(0)  # [1, kl, h_k, d]
+        v_i = v[kv_off:kv_off + kl].unsqueeze(0)
+
+        off = (qo_offset[i] if qo_offset is not None else kl - ql)
+        with torch.no_grad():
+            results.append(sdpa_ref_new(q_i, k_i, v_i, h_q, h_k, causal=True, qo_offset=off))
 
         qo_off += ql
         kv_off += kl
@@ -152,7 +180,7 @@ def test_split_vs_sdpa():
     q, k, v, qo_lens_t, kv_lens_t, qo_offset_t = make_inputs(
         qo_lens, kv_lens, h_q, h_k, d, device)
 
-    o_ref = sdpa_ref_varlen(q, k, v, qo_lens, kv_lens, h_q, h_k,
+    o_ref = sdpa_ref_varlen_new(q, k, v, qo_lens, kv_lens, h_q, h_k,
                             qo_offset=[kl - ql for ql, kl in zip(qo_lens, kv_lens)])
 
     plan_info = fmha_ppu_plan(
@@ -177,7 +205,7 @@ def test_split_gqa():
     q, k, v, qo_lens_t, kv_lens_t, qo_offset_t = make_inputs(
         qo_lens, kv_lens, h_q, h_k, d, device)
 
-    o_ref = sdpa_ref_varlen(q, k, v, qo_lens, kv_lens, h_q, h_k,
+    o_ref = sdpa_ref_varlen_new(q, k, v, qo_lens, kv_lens, h_q, h_k,
                             qo_offset=[kl - ql for ql, kl in zip(qo_lens, kv_lens)])
 
     plan_info = fmha_ppu_plan(
@@ -229,7 +257,7 @@ def test_split_paged():
     k_flat = torch.cat(k_batches, dim=0)
     v_flat = torch.cat(v_batches, dim=0)
     qo_offset_list = [kl - ql for ql, kl in zip(qo_lens, kv_lens)]
-    o_ref = sdpa_ref_varlen(q, k_flat, v_flat, qo_lens, kv_lens, h_q, h_k,
+    o_ref = sdpa_ref_varlen_new(q, k_flat, v_flat, qo_lens, kv_lens, h_q, h_k,
                             qo_offset=qo_offset_list)
 
     qo_lens_t = torch.tensor(qo_lens, dtype=torch.int32)
@@ -268,7 +296,7 @@ def test_split_maxscore():
 
     passed = True
     # Verify output against SDPA
-    o_ref = sdpa_ref_varlen(q, k, v, qo_lens, kv_lens, h_q, h_k,
+    o_ref = sdpa_ref_varlen_new(q, k, v, qo_lens, kv_lens, h_q, h_k,
                             qo_offset=[kl - ql for ql, kl in zip(qo_lens, kv_lens)])
     passed &= check("split_maxscore_out", out, o_ref, threshold=0.9999)
 

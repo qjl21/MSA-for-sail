@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from conftest import fp8_test_dtypes
+from ref_attn import sdpa_ref_new
 from fmha_ppu import fmha_ppu as _fmha_ppu
 from fmha_ppu import fmha_ppu_plan
 
@@ -228,7 +229,7 @@ def _run_case(b, q_len, k_len, h_q, h_k, d, dtype, num_kv_splits=-1, causal=True
         v_fi = v_bf16.reshape(b * k_len, h_k, d)
         q_ref_bf16, k_ref_bf16, v_ref_bf16 = q_bf16, k_bf16, v_bf16
 
-    o_ref = sdpa_ref(q_ref_bf16, k_ref_bf16, v_ref_bf16, h_q, h_k, causal, qo_offset=qo_offset_val)
+    o_ref = sdpa_ref_new(q_ref_bf16, k_ref_bf16, v_ref_bf16, h_q, h_k, causal, qo_offset=qo_offset_val)
     threshold = 0.99999 if dtype == torch.bfloat16 else 0.9995
 
     # Run 1: without maxscore (Off path)
@@ -348,7 +349,7 @@ def _run_case_paged(b, q_len, k_len, h_q, h_k, d, dtype, page_size=128, causal=T
     k_ref_contig = k_ref_contig[:, :k_len]  # crop padding
     v_ref_contig = v_ref_contig[:, :k_len]
 
-    o_ref = sdpa_ref(q_ref_bf16, k_ref_contig, v_ref_contig, h_q, h_k, causal, qo_offset=qo_offset_val)
+    o_ref = sdpa_ref_new(q_ref_bf16, k_ref_contig, v_ref_contig, h_q, h_k, causal, qo_offset=qo_offset_val)
 
     qo_lens = torch.full((b,), q_len, dtype=torch.int32)
     kv_lens = torch.full((b,), k_len, dtype=torch.int32)
@@ -603,7 +604,7 @@ def _run_case_chaos(h_q, h_k, d, dtype, causal=True, seed=42, device="cuda:0"):
             vi_ref = vi.to(dtype).to(torch.bfloat16)
         else:
             qi_ref, ki_ref, vi_ref = qi, ki, vi
-        o_ref_i = sdpa_ref(qi_ref, ki_ref, vi_ref, h_q, h_k, causal=causal, qo_offset=off)
+        o_ref_i = sdpa_ref_new(qi_ref, ki_ref, vi_ref, h_q, h_k, causal=causal, qo_offset=off)
         q_list.append(qi.reshape(ql, h_q, d))
         k_list.append(ki.reshape(kl, h_k, d))
         v_list.append(vi.reshape(kl, h_k, d))
@@ -809,7 +810,7 @@ def _run_case_chaos_paged(h_q, h_k, d, dtype, page_size, causal=True, seed=42, d
             vi_ref = vi.to(dtype).to(torch.bfloat16)
         else:
             qi_ref, ki_ref, vi_ref = qi, ki, vi
-        o_ref_i = sdpa_ref(qi_ref, ki_ref, vi_ref, h_q, h_k, causal=causal, qo_offset=off)
+        o_ref_i = sdpa_ref_new(qi_ref, ki_ref, vi_ref, h_q, h_k, causal=causal, qo_offset=off)
         q_list.append(qi.reshape(ql, h_q, d))
         k_list.append(ki.reshape(kl, h_k, d))
         v_list.append(vi.reshape(kl, h_k, d))
@@ -1624,7 +1625,7 @@ def main():
                     k_fi = k_bf16.reshape(b * k_len, h_k, 128)
                     v_fi = v_bf16.reshape(b * k_len, h_k, 128)
                     q_ref, k_ref, v_ref = q_bf16, k_bf16, v_bf16
-                o_ref = sdpa_ref(q_ref, k_ref, v_ref, h_q, h_k, causal=True, qo_offset=k_len - q_len)
+                o_ref = sdpa_ref_new(q_ref, k_ref, v_ref, h_q, h_k, causal=True, qo_offset=k_len - q_len)
                 # Run without pre-alloc (baseline)
                 o_baseline = run_fmha_ppu(q_fi, k_fi, v_fi, b, q_len, k_len, h_q, h_k, 128, dtype, -1, causal=True,
                                             qo_offset=torch.full((b,), k_len - q_len, dtype=torch.int32))
