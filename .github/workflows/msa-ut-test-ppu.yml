@@ -1,0 +1,173 @@
+name: msa ut test     # Workflow name, shown on the Actions page
+
+on:
+  workflow_call:
+    inputs:
+      matrix:
+        required: false
+        type: string
+        # Both boards run in parallel: fp8 is dropped on PPU0010 (810E) by
+        # tests/conftest.py:fp8_test_dtypes, so the same suite is valid on each.
+        default: '["ZW-M890P", "ZW-810E"]'
+      source_mode:
+        description: "Source layout mode. Supported values: msa, actlize."
+        required: false
+        type: string
+        default: msa
+  workflow_dispatch:
+    inputs:
+      matrix:
+        description: "JSON array of PPU runner board types"
+        required: false
+        type: string
+        default: '["ZW-M890P", "ZW-810E"]'
+      source_mode:
+        description: "Source layout mode. Supported values: msa, actlize."
+        required: false
+        type: string
+        default: msa
+
+permissions:
+  contents: read
+
+env:
+  SAIL_IMAGE: download.t-head.cn/docker_release/pytorch:sdk2.2.0-2.10.0-ubuntu24.04-hggcrt3-py312-20261005
+
+jobs:
+  build-test:
+    name: Build & Test (${{ matrix.runner }})
+    runs-on: k8s-runner-group-cpu-thead
+    container:
+      image: ghcr.io/actions/actions-runner:latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        # Results are kept per runner on NAS, so the two boards never collide.
+        runner: ${{ fromJson(inputs.matrix || '["ZW-M890P", "ZW-810E"]') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history and the release tag are needed to derive the version.
+          fetch-depth: 0
+          # python/fmha_ppu/actlize provides the headers the JIT build includes.
+          submodules: recursive
+          persist-credentials: false
+      - name: Build and Test on PPU
+        id: ppu-test
+        uses: t-head/ci-infra/cluster-run@main
+        with:
+          image: ${{ env.SAIL_IMAGE }}
+          nnodes: 0
+          nproc_per_node: 1
+          node_selector: "board-type=${{ matrix.runner }}"
+          namespace: ppu-sched
+          timeout_minutes: 300
+          command: |
+            set -ex
+            SOURCE_MODE='${{ inputs.source_mode }}'
+            case "$SOURCE_MODE" in
+              ""|msa)
+                cd /workspace/source
+                ;;
+              actlize)
+                # The calling repository IS actlize: clone MSA fresh and drop the
+                # caller in at the submodule path the JIT build includes from.
+                cd /workspace
+                MSA_SOURCE=$(mktemp -d /workspace/msa-source.XXXXXX)
+                rmdir "$MSA_SOURCE"
+                git clone https://github.com/t-head/MSA-for-sail.git "$MSA_SOURCE"
+
+                ACTLIZE_SOURCE=$(mktemp -d /workspace/actlize-source.XXXXXX)
+                rmdir "$ACTLIZE_SOURCE"
+                mv /workspace/source "$ACTLIZE_SOURCE"
+                rm -rf "$MSA_SOURCE/python/fmha_ppu/actlize"
+                mkdir -p "$MSA_SOURCE/python/fmha_ppu"
+                mv "$ACTLIZE_SOURCE" "$MSA_SOURCE/python/fmha_ppu/actlize"
+                mv "$MSA_SOURCE" /workspace/source
+                cd /workspace/source
+                ;;
+              *)
+                echo "Unsupported source_mode: $SOURCE_MODE"
+                exit 1
+                ;;
+            esac
+            # Fix: image bakes in PIP_INDEX_URL pointing to unreachable internal server
+            unset PIP_INDEX_URL
+            # Fix: image bakes in git insteadOf redirecting github.com to unreachable internal gerrit
+            git config --global --unset-all url.https://ai-gerrit.eng.t-head.cn/Public/Github/.insteadOf 2>/dev/null || true
+            git config --global --add safe.directory '*'
+            source /usr/local/PPU_SDK/envsetup.sh || true
+            which hgcc || true
+            echo $PPU_SDK
+            pip install setuptools==69.5.1
+            # Pin so the build never re-fetches it from the (unreachable) internal index.
+            pip install setuptools-scm==9.2.2
+            pip install junit-xml wheel ninja
+            pip install --upgrade pytest
+            pip install apache-tvm-ffi jinja2
+
+            if [[ "$SOURCE_MODE" == "actlize" ]]; then
+              echo "Using the calling repository as python/fmha_ppu/actlize"
+            else
+              echo "START TO CHECKOUT actlize submodule"
+              git submodule update --init --recursive
+            fi
+
+            echo "START TO BUILD WHEEL"
+            LOG_FILE="build.log"
+            ERROR_LOG="error.log"
+            set +e
+            python ./setup.py bdist_wheel > "$LOG_FILE" 2> "$ERROR_LOG"
+            BUILD_EXIT_CODE=$?
+            set -e
+            if [ "$BUILD_EXIT_CODE" -ne 0 ]; then
+                echo "Build failed with exit code $BUILD_EXIT_CODE"
+                cat "$ERROR_LOG"
+                echo "----- last 1000 lines of $LOG_FILE -----"
+                tail -n 1000 "$LOG_FILE"
+                # NAS survives the Pod.
+                NAS_RESULT_DIR="/mnt/wl_nas/devops/msa-ci/${{ github.run_id }}/${{ github.run_attempt }}/${{ matrix.runner }}"
+                mkdir -p "$NAS_RESULT_DIR"
+                cp "$LOG_FILE" "$ERROR_LOG" "$NAS_RESULT_DIR/" 2>/dev/null || true
+                exit 1
+            fi
+            echo "✅ Build succeeded!"
+            tail -n 200 "$LOG_FILE"
+
+            echo "START TO INSTALL WHEEL"
+            pip install dist/*.whl --force-reinstall --no-deps
+            echo "START TO TEST CASES"
+            set +e
+            python .github/workflows/scripts/pr-msa-ut.py \
+              --caselist .github/workflows/scripts/casecmd.list
+            TEST_EXIT_CODE=$?
+            python3 .github/workflows/scripts/generate-env-info.py \
+              --docker-image "$SAIL_IMAGE" \
+              --output env_info.json
+            # Keep results per runner so the parallel matrix jobs do not collide.
+            NAS_RESULT_DIR="/mnt/wl_nas/devops/msa-ci/${{ github.run_id }}/${{ github.run_attempt }}/${{ matrix.runner }}"
+            mkdir -p "$NAS_RESULT_DIR"
+            cp test-results.xml "$NAS_RESULT_DIR/" 2>/dev/null || true
+            cp env_info.json "$NAS_RESULT_DIR/" 2>/dev/null || true
+            # A failed suite must fail the job so publishing is skipped.
+            exit "$TEST_EXIT_CODE"
+          cleanup_policy: on_success
+
+      - name: Test summary (${{ matrix.runner }})
+        if: always()
+        shell: bash
+        run: |
+          NAS_RESULT_DIR="/wl_nas/devops/msa-ci/${{ github.run_id }}/${{ github.run_attempt }}/${{ matrix.runner }}"
+          XML_FILE="$NAS_RESULT_DIR/test-results.xml"
+          ENV_FILE="$NAS_RESULT_DIR/env_info.json"
+          echo "## Runner: ${{ matrix.runner }}" >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ ! -f "$XML_FILE" ]]; then
+            echo "JUnit report not found: $XML_FILE" >> "$GITHUB_STEP_SUMMARY"
+            echo "If the build failed, its logs are kept under $NAS_RESULT_DIR/ (build.log / error.log)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          python3 .github/workflows/scripts/display-test-summary.py \
+            "$XML_FILE" --env-info "$ENV_FILE"

@@ -1,0 +1,14 @@
+# MSA PR unit-test commands
+# Each non-empty, non-comment line is executed as a shell command.
+
+python ./tests/smoke/test_sparse_topk_forced.py
+python ./tests/smoke/test_proxy_kv_smoke.py --check
+python ./tests/smoke/test_onlyscore_smoke.py --check
+python -m pytest ./tests/integration/test_q_offset_override.py -q -o console_output_style=classic
+python -m pytest ./tests/integration/test_mixed_split.py -q -o console_output_style=classic
+python -m pytest ./tests/integration/test_onlyscore_pipeline.py -q -o console_output_style=classic
+python ./tests/integration/test_plan_correctness.py
+python ./tests/integration/test_proxy_kv_e2e.py
+python ./tests/regression/test_correctness.py --check
+python ./tests/regression/test_onlyscore_correctness.py --check
+python ./tests/regression/test_sparse_attn.py
