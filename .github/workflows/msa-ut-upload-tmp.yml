@@ -46,7 +46,7 @@ jobs:
         with:
           # Full history and the release tag are needed to derive the version.
           fetch-depth: 0
-          # python/fmha_ppu/actlize provides the headers the JIT build includes.
+          # python/msa_for_sail/actlize provides the headers the JIT build includes.
           submodules: recursive
           persist-credentials: false
       - name: Build and Test on PPU

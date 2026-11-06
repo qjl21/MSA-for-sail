@@ -50,7 +50,7 @@ jobs:
         with:
           # Full history and the release tag are needed to derive the version.
           fetch-depth: 0
-          # python/fmha_ppu/actlize provides the headers the JIT build includes.
+          # python/msa_for_sail/actlize provides the headers the JIT build includes.
           submodules: recursive
           persist-credentials: false
       - name: Build and Test on PPU
@@ -81,9 +81,9 @@ jobs:
                 ACTLIZE_SOURCE=$(mktemp -d /workspace/actlize-source.XXXXXX)
                 rmdir "$ACTLIZE_SOURCE"
                 mv /workspace/source "$ACTLIZE_SOURCE"
-                rm -rf "$MSA_SOURCE/python/fmha_ppu/actlize"
-                mkdir -p "$MSA_SOURCE/python/fmha_ppu"
-                mv "$ACTLIZE_SOURCE" "$MSA_SOURCE/python/fmha_ppu/actlize"
+                rm -rf "$MSA_SOURCE/python/msa_for_sail/actlize"
+                mkdir -p "$MSA_SOURCE/python/msa_for_sail"
+                mv "$ACTLIZE_SOURCE" "$MSA_SOURCE/python/msa_for_sail/actlize"
                 mv "$MSA_SOURCE" /workspace/source
                 cd /workspace/source
                 ;;
@@ -108,7 +108,7 @@ jobs:
             pip install apache-tvm-ffi jinja2
 
             if [[ "$SOURCE_MODE" == "actlize" ]]; then
-              echo "Using the calling repository as python/fmha_ppu/actlize"
+              echo "Using the calling repository as python/msa_for_sail/actlize"
             else
               echo "START TO CHECKOUT actlize submodule"
               git submodule update --init --recursive
