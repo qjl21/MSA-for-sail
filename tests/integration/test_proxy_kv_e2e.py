@@ -8,7 +8,7 @@ Pipeline (Quest / MagicPIG / RetrievalAttention style):
 
     KV cache A (proxy, MQA-compressed)
         ↓
-    [Dense pass] fmha_ppu(num_kv_heads=1) → max_score
+    [Dense pass] fmha_sail(num_kv_heads=1) → max_score
         ↓
     [sparse_topk_select] (no reduce, direct drop-in)
         ↓
@@ -16,7 +16,7 @@ Pipeline (Quest / MagicPIG / RetrievalAttention style):
         ↓
     KV cache B (real, GQA, full precision)
         ↓
-    [Sparse pass] fmha_ppu(num_kv_heads=num_kv_heads_real, batch=T) → o
+    [Sparse pass] fmha_sail(num_kv_heads=num_kv_heads_real, batch=T) → o
 
 Key constraints on the head dimension:
     num_qo_heads_dense == num_kv_heads_real
@@ -44,8 +44,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from conftest import fp8_test_dtypes
-from fmha_ppu import fmha_ppu, fmha_ppu_plan
-from fmha_ppu import sparse_topk_select
+from msa_for_sail import fmha_sail, fmha_sail_plan
+from msa_for_sail import sparse_topk_select
 
 
 failed_cases = []
@@ -180,11 +180,11 @@ def _run_proxy_kv_e2e(name, seed, total_qo_len, num_kv_heads_real,
     kv_segment_lens_d = torch.tensor([kv_len], dtype=torch.int32)
     qo_offset_d = torch.tensor([qo_offset_prefix], dtype=torch.int32)
     kv_indices_d = torch.arange(pages_per_seq, device=dev, dtype=torch.int32)
-    plan_dense = fmha_ppu_plan(qo_segment_lens_d, kv_segment_lens_d,
+    plan_dense = fmha_sail_plan(qo_segment_lens_d, kv_segment_lens_d,
         num_qo_heads_dense, causal=True,
         page_size=page_size, output_maxscore=True,
     )
-    _, max_score = fmha_ppu(
+    _, max_score = fmha_sail(
         q_dense, k_pages_dense, v_pages_dense, plan_dense,
         sm_scale=1.0 / math.sqrt(head_dim),
         kv_indices=kv_indices_d,
@@ -217,14 +217,14 @@ def _run_proxy_kv_e2e(name, seed, total_qo_len, num_kv_heads_real,
         dtype=torch.int32,
     )
     kv_indices_s = kv_indices_d.repeat(total_qo_len)
-    plan_sparse = fmha_ppu_plan(qo_segment_lens_s, kv_segment_lens_s,
+    plan_sparse = fmha_sail_plan(qo_segment_lens_s, kv_segment_lens_s,
         num_qo_heads_real, causal=True,
         qo_offset=qo_offset_s,
         page_size=page_size, kv_block_num=topk,
         num_kv_heads=num_kv_heads_real,
         use_fp8_kvcache=(dtype == torch.float8_e4m3fn),
     )
-    o, _ = fmha_ppu(
+    o, _ = fmha_sail(
         q_real, k_pages_real, v_pages_real, plan_sparse,
         sm_scale=1.0 / math.sqrt(head_dim),
         kv_indices=kv_indices_s,

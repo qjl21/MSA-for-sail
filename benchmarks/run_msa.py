@@ -10,7 +10,7 @@ The format string is the single-line log printed by the MSA FMHA kernel when
 qo_offset:[1141,...],num_qo_heads:4,num_kv_heads:4,head_dim_qk:128,head_dim_vo:128,\
 num_kv_splits:1,is_paged:1,page_size:128,causal:1,sm_scale:0.088388.
 
-Only the user-facing inputs of ``fmha_ppu`` / ``fmha_ppu_plan`` are carried
+Only the user-facing inputs of ``fmha_sail`` / ``fmha_sail_plan`` are carried
 in the string; internally computed quantities (variant key, sparse_mode,
 qo_tile_size, single_wg, pack_factor, max_qo_len, max_k_tiles) are re-derived by
 the plan. Random Q/K/V data with the parsed shapes is used (the original tensor
@@ -41,7 +41,7 @@ import torch
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "python"))
 
-from fmha_ppu import fmha_ppu, fmha_ppu_plan  # noqa: E402
+from msa_for_sail import fmha_sail, fmha_sail_plan  # noqa: E402
 
 
 def _convert(value: str):
@@ -148,7 +148,7 @@ def compute_min_dram_bytes(cfg: dict, elem_bytes: int) -> int:
 
 def compute_tflops(cfg: dict, mean_ms: float) -> float:
     """Achieved TFLOP/s; sparse uses accessed-kv (kv_block_num*page_size) FLOPs."""
-    from fmha_ppu.bench_utils import attention_tflops
+    from msa_for_sail.bench_utils import attention_tflops
     h_q = int(cfg["num_qo_heads"])
     d_qk = int(cfg["head_dim_qk"]); d_vo = int(cfg["head_dim_vo"])
     seqlen_q = list(cfg["seqlen_q"]); seqlen_k = list(cfg["seqlen_k"])
@@ -240,7 +240,7 @@ def build_case(cfg: dict, device: str = "cuda:0", ref_device: str = None):
         v = torch.randn(total_kv, h_k, d_vo, dtype=init_dtype, device=ref_device).to(dtype)
 
     # Plan workspaces live on the kernel device (cuda); segment_lens stay on CPU.
-    plan_info = fmha_ppu_plan(
+    plan_info = fmha_sail_plan(
         qo_lens, kv_lens, h_q,
         num_kv_heads=h_k,
         qo_offset=qo_offset,
@@ -269,7 +269,7 @@ def run_case(cfg: dict, bench: bool = False,
         return t.to(device) if t is not None else None
 
     def fn():
-        return fmha_ppu(
+        return fmha_sail(
             _to_dev(c["q"]), _to_dev(c["k"]), _to_dev(c["v"]),
             plan_info=c["plan_info"],
             kv_indices=_to_dev(c["kv_indices"]),
@@ -287,7 +287,7 @@ def run_case(cfg: dict, bench: bool = False,
 
     if bench:
         import numpy as np
-        from fmha_ppu.bench_utils import bench_gpu_time
+        from msa_for_sail.bench_utils import bench_gpu_time
         times = bench_gpu_time(fn)
         med = float(np.median(times))
         tflops = compute_tflops(cfg, med)

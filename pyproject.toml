@@ -3,7 +3,7 @@ requires = ["setuptools>=64", "wheel", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fmha_ppu"
+name = "msa_for_sail"
 dynamic = ["version"]
 description = "MSA — MiniMax Sparse Attention: dense FlashAttention + sparse top-k indexer (csrc JIT) for the PPU (HGGC)"
 readme = "README.md"
@@ -20,18 +20,18 @@ dependencies = [
 
 [project.urls]
 
-# The Python package lives under python/. Kernel sources ship as package data
-# and work from both editable and wheel installs: the csrc/ kernels are
-# JIT-compiled at runtime (python/fmha_ppu/jit.py), and the kernel sources,
-# Jinja templates, and vendored ACTLIZE headers live inside the package
-# directory so that JIT can locate them via __file__.
+# The Python package lives under python/msa_for_sail/. Kernel sources ship as
+# package data and work from both editable and wheel installs: the csrc/
+# kernels are JIT-compiled at runtime (python/msa_for_sail/jit.py), and the
+# kernel sources, Jinja templates, and vendored ACTLIZE headers live inside
+# the package directory so that JIT can locate them via __file__.
 [tool.setuptools]
 package-dir = { "" = "python" }
 license-files = ["LICENSE", "NOTICE", "THIRD-PARTY-NOTICES"]
-packages = ["fmha_ppu"]
+packages = ["msa_for_sail"]
 
 [tool.setuptools.package-data]
-fmha_ppu = [
+msa_for_sail = [
     "csrc/**/*",
     # glob patterns skip dot directories, so the hidden .ppu_compat/ shim
     # headers need an explicit entry to land in the wheel.

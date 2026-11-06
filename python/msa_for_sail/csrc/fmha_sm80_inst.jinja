@@ -7,12 +7,12 @@
 #include "fmha_cutlass_sm80.cuh"
 #include "mask.cuh"
 #include "cutlass_utils.cuh"
-#include "fmha_ppu_params.h"
+#include "fmha_sail_params.h"
 
 using namespace flashinfer;
 using namespace cute;
 
-hggcError_t {{ func_name }}(const FMHACutlassPPUParams& p) {
+hggcError_t {{ func_name }}(const FMHACutlassSailParams& p) {
   using cutlass_type_in = cutlass_dtype_t<{{ dtype_in }}>;
   using cutlass_type_out = {{ cutlass_dtype_out }};
   using TileShapeQK = Shape<{{ tile_q }}, {{ tile_kv }}, cute::Int<128>>;

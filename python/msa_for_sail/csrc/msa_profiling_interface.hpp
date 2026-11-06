@@ -91,7 +91,7 @@ public:
     return oss.str();
   }
 
-  // Populate all user-facing fmha_ppu / fmha_ppu_plan input parameters.
+  // Populate all user-facing fmha_sail / fmha_sail_plan input parameters.
   // seqlen_q / seqlen_k / qo_offset are read back from device (D2H). When a
   // CUDA graph is being captured, the capture mode is relaxed and a non-blocking
   // side stream is used for the D2H copies (mirrors FlashMLA's verified

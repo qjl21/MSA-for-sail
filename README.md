@@ -5,7 +5,7 @@
 [![Device](https://img.shields.io/badge/device-PPU%20%2F%20HGGC-orange.svg)](#requirements)
 [![Stack: PPU + HGGC](https://img.shields.io/badge/stack-PPU%20%2B%20HGGC-blue.svg)](#stack)
 
-**MSA** (`fmha_ppu`) ships dense FlashAttention and sparse top-k attention
+**MSA** (`msa_for_sail`) ships dense FlashAttention and sparse top-k attention
 kernels for **PPU (HGGC)**. A single JIT-compiled stack
 lives in the Python package:
 
@@ -15,7 +15,7 @@ lives in the Python package:
 
 | Stack | Path | What it gives you |
 |---|---|---|
-| **csrc JIT** | `python/fmha_ppu/csrc/` | Dense FMHA (`fmha_ppu`, `fmha_ppu_plan`) + `sparse_topk_select` indexer, compiled from Jinja templates by `jit.py` at runtime. |
+| **csrc JIT** | `python/msa_for_sail/csrc/` | Dense FMHA (`fmha_sail`, `fmha_sail_plan`) + `sparse_topk_select` indexer, compiled from Jinja templates by `jit.py` at runtime. |
 
 > **License: MIT.** Self-authored files carry `SPDX-License-Identifier: MIT`.
 > See [LICENSE](LICENSE) and [NOTICE](NOTICE). Bundled / derived third-party
@@ -40,7 +40,7 @@ python -c "import sys; print(sys.version_info[:2])"              # ≥ (3, 10)
 ## Install
 
 ```bash
-# --recursive pulls the ACTLIZE submodule (python/fmha_ppu/actlize/),
+# --recursive pulls the ACTLIZE submodule (python/msa_for_sail/actlize/),
 # whose headers are required for JIT/AOT compilation.
 git clone --recursive https://github.com/t-head/MSA-for-sail.git msa
 cd msa
@@ -68,19 +68,19 @@ python tests/smoke/test_sparse_topk_forced.py
 
 ```python
 import torch
-from fmha_ppu import fmha_ppu, fmha_ppu_plan, sparse_topk_select
+from msa_for_sail import fmha_sail, fmha_sail_plan, sparse_topk_select
 
 # Page size and top-k for the sparse prefill path.
 page_size, topk = 128, 16
 
 # Dense proxy pass: compute per-block max score from a cheap Q slice.
-proxy_plan = fmha_ppu_plan(
+proxy_plan = fmha_sail_plan(
     qo_lens, kv_lens, proxy_q.shape[1],
     num_kv_heads=1,
     page_size=page_size,
     output_maxscore=True,
 )
-_, max_score = fmha_ppu(
+_, max_score = fmha_sail(
     proxy_q, proxy_k_pages, proxy_v_pages, proxy_plan,
     kv_indices=kv_indices,
     output_o=False,
@@ -93,13 +93,13 @@ kv_block_indexes = sparse_topk_select(
 )
 
 # Sparse attention with the selected blocks.
-sparse_plan = fmha_ppu_plan(
+sparse_plan = fmha_sail_plan(
     qo_lens, kv_lens, q.shape[1],
     num_kv_heads=k_pages.shape[1],
     page_size=page_size,
     kv_block_num=topk,
 )
-out, _ = fmha_ppu(
+out, _ = fmha_sail(
     q, k_pages, v_pages, sparse_plan,
     kv_indices=kv_indices,
     kv_block_indexes=kv_block_indexes,
@@ -163,9 +163,9 @@ Common invocations (output is TSV):
 ## Layout
 
 ```
-python/fmha_ppu/                  Python package
+python/msa_for_sail/                  Python package
   __init__.py                       Public re-exports
-  api.py                            fmha_ppu / fmha_ppu_plan / sparse_topk_select
+  api.py                            fmha_sail / fmha_sail_plan / sparse_topk_select
   jit.py                            Runtime JIT (hgcc + ninja) for the csrc stack
   csrc/                             CUDA kernels + Jinja templates (JIT-compiled)
     include/                        Vendored FlashInfer / CUTLASS-derived / TRT-LLM headers
@@ -181,7 +181,7 @@ benchmarks/                         bench_sparse_attention_ops.py
 - **csrc JIT** — dense FlashAttention, page KV, sparse `kv_block_indexes`
   attention, and the `sparse_topk_select` indexer. Compiled at runtime from
   `csrc/*.cu.jinja` plus `csrc/include/`. Public entry:
-  `fmha_ppu.plan → run`.
+  `fmha_sail_plan → fmha_sail`.
 
 ## Third-party licenses
 
@@ -193,7 +193,7 @@ components retain their original licenses. Full license texts are in
 `THIRD-PARTY-NOTICES`; per-component details, file lists and provenance
 are in `NOTICE`.
 
-`fmha_ppu` bundles, derives from, or depends on the third-party components
+`msa_for_sail` bundles, derives from, or depends on the third-party components
 below. Each retains its original license; this section summarizes them.
 Authoritative text is shipped with each component.
 
@@ -201,10 +201,10 @@ Authoritative text is shipped with each component.
 
 | Component | License | Where |
 |---|---|---|
-| **T-Head ACTLIZE** (CUTLASS 3.6.0 adaptation for PPU) | BSD-3-Clause | Git submodule at `python/fmha_ppu/actlize/` (only `include/` is consumed). Copyright (c) 2022–2026 T-Head (Shanghai) Semiconductor Co., Ltd.; Copyright (c) 2017–2024 NVIDIA CORPORATION & AFFILIATES; Copyright (c) 2017–2025 Advanced Micro Devices, Inc. (MIT-licensed portions). |
-| **Vendored CUTLASS-derived headers** | BSD-3-Clause | `python/fmha_ppu/csrc/include/`: `pow_2.hpp` and `gather_tensor.hpp` carry Copyright (c) 2023–2025 NVIDIA CORPORATION & AFFILIATES; `fmha.hpp`, `fmha_common.hpp`, `fmha_fusion.hpp`, `fmha_options.hpp` and `fmha_tile_scheduler.hpp` carry 2024–2025. `pow_2.hpp`, `fmha.hpp`, `fmha_common.hpp`, `fmha_fusion.hpp` and `fmha_tile_scheduler.hpp` are modified for the PPU (HGGC) port and carry an additional T-Head copyright line. |
-| **FlashInfer** | Apache-2.0 | Sources under `python/fmha_ppu/csrc/` and `python/fmha_ppu/csrc/include/` carrying a `Copyright (c) <year> by FlashInfer team` line: `allocator.h`, `exception.h`, `mask.cuh` (unmodified), and `vec_dtypes.cuh`, `cutlass_utils.cuh`, `utils.cuh`, `plan.cuh`, `sparse_topk_select.cuh`, `tvm_ffi_utils.h`, `fmha_cutlass_sm80.cuh` (adapted from upstream `fmha_cutlass_sm100.cuh`) — the modified files carry an additional T-Head copyright line. Sources match the flashinfer v0.6.8.post1 lineage; `plan.cuh` is from a later upstream revision. Project: <https://github.com/flashinfer-ai/flashinfer>. |
-| **NVIDIA TensorRT-LLM + NAVER Corp (CLOVA)** | Apache-2.0 | Portions of `python/fmha_ppu/csrc/include/sparse_topk_select.cuh` — `indexerTopK` histogram-step + insertion-sort derived from `tensorrt_llm/cpp/tensorrt_llm/kernels/indexerTopK.cu`. Copyright (c) 2019–2026 NVIDIA CORPORATION; Copyright (c) 2021 NAVER Corp. The per-file header in `sparse_topk_select.cuh` includes a function-level provenance map. |
+| **T-Head ACTLIZE** (CUTLASS 3.6.0 adaptation for PPU) | BSD-3-Clause | Git submodule at `python/msa_for_sail/actlize/` (only `include/` is consumed). Copyright (c) 2022–2026 T-Head (Shanghai) Semiconductor Co., Ltd.; Copyright (c) 2017–2024 NVIDIA CORPORATION & AFFILIATES; Copyright (c) 2017–2025 Advanced Micro Devices, Inc. (MIT-licensed portions). |
+| **Vendored CUTLASS-derived headers** | BSD-3-Clause | `python/msa_for_sail/csrc/include/`: `pow_2.hpp` and `gather_tensor.hpp` carry Copyright (c) 2023–2025 NVIDIA CORPORATION & AFFILIATES; `fmha.hpp`, `fmha_common.hpp`, `fmha_fusion.hpp`, `fmha_options.hpp` and `fmha_tile_scheduler.hpp` carry 2024–2025. `pow_2.hpp`, `fmha.hpp`, `fmha_common.hpp`, `fmha_fusion.hpp` and `fmha_tile_scheduler.hpp` are modified for the PPU (HGGC) port and carry an additional T-Head copyright line. |
+| **FlashInfer** | Apache-2.0 | Sources under `python/msa_for_sail/csrc/` and `python/msa_for_sail/csrc/include/` carrying a `Copyright (c) <year> by FlashInfer team` line: `allocator.h`, `exception.h`, `mask.cuh` (unmodified), and `vec_dtypes.cuh`, `cutlass_utils.cuh`, `utils.cuh`, `plan.cuh`, `sparse_topk_select.cuh`, `tvm_ffi_utils.h`, `fmha_cutlass_sm80.cuh` (adapted from upstream `fmha_cutlass_sm100.cuh`) — the modified files carry an additional T-Head copyright line. Sources match the flashinfer v0.6.8.post1 lineage; `plan.cuh` is from a later upstream revision. Project: <https://github.com/flashinfer-ai/flashinfer>. |
+| **NVIDIA TensorRT-LLM + NAVER Corp (CLOVA)** | Apache-2.0 | Portions of `python/msa_for_sail/csrc/include/sparse_topk_select.cuh` — `indexerTopK` histogram-step + insertion-sort derived from `tensorrt_llm/cpp/tensorrt_llm/kernels/indexerTopK.cu`. Copyright (c) 2019–2026 NVIDIA CORPORATION; Copyright (c) 2021 NAVER Corp. The per-file header in `sparse_topk_select.cuh` includes a function-level provenance map. |
 
 ### Runtime dependencies (installed via pip)
 

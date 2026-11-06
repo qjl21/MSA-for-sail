@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // Auto-generated per-variant FMHA run binding: {{ variant_name }}
-#include "fmha_ppu_params.h"
+#include "fmha_sail_params.h"
 #include "msa_profiling_interface.hpp"
 #include "tvm_ffi_utils.h"
 #include <cmath>
@@ -12,7 +12,7 @@
 using tvm::ffi::Optional;
 
 // Forward-declare the variant kernel function (defined in the inst .cu file)
-extern hggcError_t {{ func_name }}(const FMHACutlassPPUParams& p);
+extern hggcError_t {{ func_name }}(const FMHACutlassSailParams& p);
 
 void FMHAVariantRun_{{ variant_name }}(ffi::TensorView workspace_buffer, ffi::TensorView q, ffi::TensorView k,
                     ffi::TensorView v, ffi::TensorView qo_segment_lens,
@@ -66,7 +66,7 @@ void FMHAVariantRun_{{ variant_name }}(ffi::TensorView workspace_buffer, ffi::Te
 
   const hggcStream_t stream = reinterpret_cast<hggcStream_t>(stream_ptr);
 
-  FMHACutlassPPUParams params;
+  FMHACutlassSailParams params;
   params.workspace_buffer_ptr = workspace_buffer.data_ptr();
   params.q_ptr = q.data_ptr();
   params.k_ptr = k.data_ptr();
@@ -234,7 +234,7 @@ void FMHAVariantRun_{{ variant_name }}(ffi::TensorView workspace_buffer, ffi::Te
   // ---- Parameter profiling (PPU_LIB_SHOW_PARAMS / PPU_LIB_PERF_INSTRUMENT) ----
   msa::fmha::FmhaProfParam msa_prof_params;
   if (msa::fmha::ProfilingInterface::Instance().get_op_info()) {
-    // User-facing inputs of fmha_ppu / fmha_ppu_plan are printed, plus
+    // User-facing inputs of fmha_sail / fmha_sail_plan are printed, plus
     // sparse_mode and kv_block_num which identify the kernel path. The
     // remaining derived dispatch values (variant key, qo_tile_size, single_wg,
     // pack_factor, max_qo_len, max_k_tiles) are omitted -- derivable from inputs.

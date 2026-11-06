@@ -4,15 +4,15 @@
 
 """FMHA varlen attention for PPU (HGGC).
 
-Provides fmha_ppu_plan() and fmha_ppu() interfaces
+Provides fmha_sail_plan() and fmha_sail() interfaces
 with per-variant lazy JIT compilation.
 """
 
-from .api import fmha_ppu, fmha_ppu_plan, sparse_topk_select, allocate_graph_workspace
+from .api import fmha_sail, fmha_sail_plan, sparse_topk_select, allocate_graph_workspace
 
 __all__ = [
-    "fmha_ppu_plan",
-    "fmha_ppu",
+    "fmha_sail_plan",
+    "fmha_sail",
     "sparse_topk_select",
     "allocate_graph_workspace",
 ]
@@ -58,21 +58,21 @@ try:
             return {str(k): _tvm_to_torch(x[k]) for k in x}
         return x
 
-    def _fmha_ppu_plan_ffi(*args):
+    def _fmha_sail_plan_ffi(*args):
         args = [_tvm_to_torch(a) for a in args]
-        return fmha_ppu_plan(*args)
+        return fmha_sail_plan(*args)
 
-    def _fmha_ppu_ffi(*args):
+    def _fmha_sail_ffi(*args):
         args = [_tvm_to_torch(a) for a in args]
-        out, max_score = fmha_ppu(*args)
+        out, max_score = fmha_sail(*args)
         return out, max_score
 
     def _sparse_topk_select_ffi(*args):
         args = [_tvm_to_torch(a) for a in args]
         return sparse_topk_select(*args)
 
-    tvm_ffi.register_global_func("minfer.ops.fmha_ppu_plan", _fmha_ppu_plan_ffi)
-    tvm_ffi.register_global_func("minfer.ops.fmha_ppu", _fmha_ppu_ffi)
+    tvm_ffi.register_global_func("minfer.ops.fmha_sail_plan", _fmha_sail_plan_ffi)
+    tvm_ffi.register_global_func("minfer.ops.fmha_sail", _fmha_sail_ffi)
     tvm_ffi.register_global_func("minfer.ops.sparse_topk_select", _sparse_topk_select_ffi)
 except ImportError:
     pass

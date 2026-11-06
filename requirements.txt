@@ -1,4 +1,4 @@
-# Runtime dependencies for fmha_ppu (csrc JIT layer).
+# Runtime dependencies for msa_for_sail (csrc JIT layer).
 # A PPU toolchain (hgcc) and a PPU device are required at runtime.
 
 # Core

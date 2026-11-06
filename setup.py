@@ -3,7 +3,7 @@ import subprocess
 
 from setuptools import setup
 
-FMHA_PPU_VERSION = '0.1.1'  # fmha_ppu version
+MSA_SAIL_VERSION = '0.1.1'  # msa_for_sail version
 RELEASE_VERSION = 'v0.1.0'  # Release version
 
 this_dir = os.path.dirname(os.path.abspath(__file__))
@@ -37,7 +37,7 @@ def get_package_version(ppu_sdk_version):
     except ImportError as error:
         raise RuntimeError('Missing build dependency: install setuptools-scm first') from error
 
-    release_tag = f'{FMHA_PPU_VERSION}+{RELEASE_VERSION}'
+    release_tag = f'{MSA_SAIL_VERSION}+{RELEASE_VERSION}'
     # Match only this release tag; uncommitted changes never affect the version.
     scm = parse(this_dir, Configuration(), describe_command=[
         'git', 'describe', '--tags', '--long', '--match', release_tag,
@@ -50,8 +50,8 @@ def get_package_version(ppu_sdk_version):
     ppu_version = '.'.join(map(str, ppu_sdk_version))
     local_version = f'{RELEASE_VERSION}.ppu{ppu_version}'
     if scm.distance in (None, 0):
-        return f'{FMHA_PPU_VERSION}+{local_version}'
-    return f'{FMHA_PPU_VERSION}.dev{scm.distance}+{local_version}.{scm.node[:9]}'
+        return f'{MSA_SAIL_VERSION}+{local_version}'
+    return f'{MSA_SAIL_VERSION}.dev{scm.distance}+{local_version}.{scm.node[:9]}'
 
 
 package_version = get_package_version(get_ppu_sdk_version())

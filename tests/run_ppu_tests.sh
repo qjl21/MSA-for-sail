@@ -54,7 +54,7 @@ echo "=========================================="
 python3 -c "
 import sys, math, time, torch
 sys.path.insert(0, '$MSA_PYTHON')
-from fmha_ppu import fmha_ppu_plan, fmha_ppu
+from msa_for_sail import fmha_sail_plan, fmha_sail
 
 HEAD = 128
 device = 'cuda'
@@ -89,18 +89,18 @@ for name, qo_len, kv_len, h_q, h_kv in bench_cases:
     qo_lens = torch.full((B,), qo_len if qo_len > 1 else 1, dtype=torch.int32)
     kv_lens = torch.full((B,), kv_len, dtype=torch.int32)
 
-    plan = fmha_ppu_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_kv, causal=True, num_kv_splits=1)
+    plan = fmha_sail_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_kv, causal=True, num_kv_splits=1)
     torch.cuda.synchronize()
 
     # Warmup
     for _ in range(WARMUP):
-        fmha_ppu(q, k, v, plan_info=plan)
+        fmha_sail(q, k, v, plan_info=plan)
     torch.cuda.synchronize()
 
     # Benchmark
     start = time.perf_counter()
     for _ in range(REPEAT):
-        fmha_ppu(q, k, v, plan_info=plan)
+        fmha_sail(q, k, v, plan_info=plan)
     torch.cuda.synchronize()
     elapsed = time.perf_counter() - start
 
@@ -117,12 +117,12 @@ print('Done!')
 
 echo ""
 echo "=========================================="
-echo "3. PPU dense e2e: all shapes (via fmha_ppu API)"
+echo "3. PPU dense e2e: all shapes (via fmha_sail API)"
 echo "=========================================="
 python3 -c "
 import sys, math, torch
 sys.path.insert(0, '$MSA_PYTHON')
-from fmha_ppu import fmha_ppu_plan, fmha_ppu
+from msa_for_sail import fmha_sail_plan, fmha_sail
 
 HEAD = 128
 sm_scale = 1.0 / math.sqrt(HEAD)
@@ -152,10 +152,10 @@ for name, qo_len, kv_len, h_q, h_kv, causal in test_cases:
     qo_lens = torch.tensor([qo_len], dtype=torch.int32)
     kv_lens = torch.tensor([kv_len], dtype=torch.int32)
 
-    plan = fmha_ppu_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_kv, causal=causal, num_kv_splits=1)
+    plan = fmha_sail_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_kv, causal=causal, num_kv_splits=1)
     torch.cuda.synchronize()
 
-    out, _ = fmha_ppu(q, k, v, plan_info=plan)
+    out, _ = fmha_sail(q, k, v, plan_info=plan)
     torch.cuda.synchronize()
 
     # Reference (correct einsum: separate n/m axes for q/k positions)
@@ -196,7 +196,7 @@ echo "=========================================="
 python3 -c "
 import sys, math, torch
 sys.path.insert(0, '$MSA_PYTHON')
-from fmha_ppu import fmha_ppu_plan, sparse_topk_select
+from msa_for_sail import fmha_sail_plan, sparse_topk_select
 
 print('--- plan: packed work validation ---')
 device = 'cuda'
@@ -267,7 +267,7 @@ for qo_lens, kv_lens, num_heads, causal, label in test_configs:
     qo_off = torch.tensor([kl - ql if causal else kl for ql, kl in zip(qo_lens, kv_lens)], dtype=torch.int32)
 
     try:
-        plan_tuple = fmha_ppu_plan(qo_l, kv_l, num_heads, causal=causal, qo_offset=qo_off, num_kv_heads=num_heads)
+        plan_tuple = fmha_sail_plan(qo_l, kv_l, num_heads, causal=causal, qo_offset=qo_off, num_kv_heads=num_heads)
         total, num_ctas, splits, errors = decode_plan(plan_tuple, num_heads, B)
 
         if errors:

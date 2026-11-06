@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
 def is_ppu15():
     """True on PPU0015 (890 / M890), False on PPU0010 (810E).
 
-    Matches the arch resolution in fmha_ppu.jit: the torch compat layer reports
+    Matches the arch resolution in msa_for_sail.jit: the torch compat layer reports
     sm_89 for PPU1.5 and sm_80 for PPU1.0.
     """
     arch = os.environ.get("MINFER_PPU_ARCH")

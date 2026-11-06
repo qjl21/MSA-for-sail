@@ -4,17 +4,17 @@
 
 """FMHA varlen attention API: plan + run for PPU.
 
-fmha_ppu_plan and fmha_ppu.
+fmha_sail_plan and fmha_sail.
 
-Doc is REPO/docs/fmha_ppu_api.md
+Doc is REPO/docs/msa_for_sail_api.md
 """
 
 import math
 from typing import Optional, Tuple, Union
 
 __all__ = [
-    "fmha_ppu_plan", "fmha_ppu", "sparse_topk_select",
-    "_fmha_ppu_plan", "_fmha_ppu",
+    "fmha_sail_plan", "fmha_sail", "sparse_topk_select",
+    "_fmha_sail_plan", "_fmha_sail",
     "allocate_graph_workspace",
 ]
 
@@ -48,7 +48,7 @@ def _plan_buf_from_list(data, device):
 from enum import IntEnum, auto
 
 class _BuffTag(IntEnum):
-    fmha_ppu_cutlass_workspace = auto()
+    fmha_sail_cutlass_workspace = auto()
 
     packed_work_range = auto()
     packed_work_info = auto()
@@ -327,7 +327,7 @@ _MAX_ADAPTIVE_SPLITS = 128
 def _plan_splits_and_sizes(is_sparse, qo_tile_size, num_ctas, n, ws_n,
                            total_qo_for_ws, pack_factor, num_qo_heads,
                            num_kv_splits):
-    """Shared split-KV decision + workspace sizing for _fmha_ppu_plan and
+    """Shared split-KV decision + workspace sizing for _fmha_sail_plan and
     allocate_graph_workspace. Single source of truth so the pre-allocated
     fixed-address workspace can never underestimate plan's requirement.
 
@@ -387,7 +387,7 @@ def allocate_graph_workspace(batch_size, num_qo_heads, num_kv_heads=-1,
     """Pre-allocate a fixed-address workspace for CUDA Graph capture.
 
     Must be called ONCE per (batch_size, num_qo_heads, max_qo_len) config.
-    The returned tensor is passed as ``given_workspace`` to ``fmha_ppu_plan``
+    The returned tensor is passed as ``given_workspace`` to ``fmha_sail_plan``
     with ``graph_safe=True``.
 
     Parameters
@@ -440,7 +440,7 @@ def allocate_graph_workspace(batch_size, num_qo_heads, num_kv_heads=-1,
         n = batch_size
         total_qo_for_ws = max_total_q * pack_factor
 
-    # Sizing must match _fmha_ppu_plan exactly; both use the shared helper.
+    # Sizing must match _fmha_sail_plan exactly; both use the shared helper.
     (_, _, _, _, _, _, total_bytes) = _plan_splits_and_sizes(
         is_sparse, qo_tile_size, num_ctas, n, max_total_q, total_qo_for_ws,
         pack_factor, packed_heads, num_kv_splits)
@@ -804,8 +804,8 @@ def _expand_for_per_token_sparse(qo_lens, kv_lens, qo_offset, page_size, pack_fa
 class PlanInfo(dict):
     """Execution plan returned by the internal dense FMHA planner.
 
-    Users normally receive the public tuple returned by ``fmha_ppu_plan`` and
-    pass it unchanged to ``fmha_ppu``.  The dictionary stores CUDA worklists,
+    Users normally receive the public tuple returned by ``fmha_sail_plan`` and
+    pass it unchanged to ``fmha_sail``.  The dictionary stores CUDA worklists,
     sequence metadata, split-KV workspaces, and cached buffers owned by the
     plan.
     """
@@ -886,7 +886,7 @@ def _call_plan(qo_segment_offsets, qo_segment_lens, kv_segment_lens,
         is_sparse,
     )
 
-def _fmha_ppu_plan(
+def _fmha_sail_plan(
     qo_segment_lens: torch.Tensor,
     kv_segment_lens: torch.Tensor,
     num_qo_heads: int,
@@ -1218,7 +1218,7 @@ def _fmha_ppu_plan(
 
 
 
-def _fmha_ppu(
+def _fmha_sail(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
@@ -1260,7 +1260,7 @@ def _fmha_ppu(
     if q.dtype == torch.float8_e4m3fn or k.dtype == torch.float8_e4m3fn:
         if q.dtype != k.dtype:
             raise ValueError(
-                f"fmha_ppu fp8 mode requires q/k to share the same dtype, "
+                f"fmha_sail fp8 mode requires q/k to share the same dtype, "
                 f"got q={q.dtype}, k={k.dtype}")
         if kv_block_indexes is not None:
             if v.dtype != q.dtype:
@@ -1272,7 +1272,7 @@ def _fmha_ppu(
         elif (output_o or not output_maxscore or max_k_tiles <= 0
                 or (max_score is not None and max_score.dtype != torch.bfloat16)):
             raise ValueError(
-                "fmha_ppu fp8 e4m3fn inputs require output_o=False, "
+                "fmha_sail fp8 e4m3fn inputs require output_o=False, "
                 "output_maxscore=True, and max_k_tiles > 0")
 
     # max_score output is float32 by default; bf16 only when explicitly
@@ -1281,7 +1281,7 @@ def _fmha_ppu(
         max_score_dtype = max_score.dtype if max_score is not None else torch.float32
     if max_score_dtype not in (torch.float32, torch.bfloat16):
         raise ValueError(
-            f"fmha_ppu max_score_dtype must be torch.float32 or "
+            f"fmha_sail max_score_dtype must be torch.float32 or "
             f"torch.bfloat16, got {max_score_dtype}")
     if max_score is not None and max_score.dtype != max_score_dtype:
         raise ValueError(
@@ -1477,7 +1477,7 @@ def _fmha_ppu(
     return out, max_score
 
 
-def fmha_ppu_plan(
+def fmha_sail_plan(
     qo_segment_lens: torch.Tensor,
     kv_segment_lens: torch.Tensor,
     *args,
@@ -1486,7 +1486,7 @@ def fmha_ppu_plan(
     split_prefill_decode = False,
     **kwargs
 ):
-    """Build a reusable execution plan for ``fmha_ppu``.
+    """Build a reusable execution plan for ``fmha_sail``.
 
     The plan is shape-dependent and can be reused across layers or repeated
     calls that share the same sequence lengths, head counts, page size, sparse
@@ -1520,7 +1520,7 @@ def fmha_ppu_plan(
         CUDA Graph capture/replay.  Under ``graph_safe=True`` it is force-
         disabled; mixed batches must be split by the caller outside capture.
     **kwargs
-        Planner options forwarded to ``_fmha_ppu_plan``.  Common options are
+        Planner options forwarded to ``_fmha_sail_plan``.  Common options are
         ``num_kv_heads``, ``num_kv_splits``, ``page_size``,
         ``output_maxscore``, ``kv_block_num``, ``usable_SM_count``, ``causal``,
         ``sparse_kernel_mode``, ``use_fp8_kvcache``, ``device``, and ``stream``.
@@ -1529,7 +1529,7 @@ def fmha_ppu_plan(
     -------
     tuple
         ``(has_mixed_prefill, split, batch_size, decode_plan, prefill_plan)``.
-        Pass this tuple unchanged as ``plan_info`` to ``fmha_ppu``.
+        Pass this tuple unchanged as ``plan_info`` to ``fmha_sail``.
     """
 
     # assert qo_segment_lens.device.type == 'cpu' \
@@ -1549,7 +1549,7 @@ def fmha_ppu_plan(
     # graph_safe mode forbids D2H sync (.item()); even if a caller explicitly
     # passes split_prefill_decode=True, force it off under graph_safe.
     # Callers needing mixed prefill/decode under graph-safe must split
-    # manually outside capture and call fmha_ppu_plan per sub-batch.
+    # manually outside capture and call fmha_sail_plan per sub-batch.
     if split_prefill_decode and kwargs.get("graph_safe", False):
         split_prefill_decode = False
     if split_prefill_decode:
@@ -1564,21 +1564,21 @@ def fmha_ppu_plan(
         decode_qo_segment_lens = qo_segment_lens[:split]
         decode_kv_segment_lens = kv_segment_lens[:split]
         decode_qo_offset = qo_offset[:split] if qo_offset is not None else None
-        decode = _fmha_ppu_plan(decode_qo_segment_lens, decode_kv_segment_lens, *args,
+        decode = _fmha_sail_plan(decode_qo_segment_lens, decode_kv_segment_lens, *args,
                                     qo_offset=decode_qo_offset, **kwargs)
         decode = {k: v.clone() if isinstance(v, torch.Tensor) else v for k, v in decode.items()}
         prefill_qo_segment_lens = qo_segment_lens[split:]
         prefill_kv_segment_lens = kv_segment_lens[split:]
         prefill_qo_offset = qo_offset[split:] if qo_offset is not None else None
-        prefill = _fmha_ppu_plan(prefill_qo_segment_lens, prefill_kv_segment_lens, *args,
+        prefill = _fmha_sail_plan(prefill_qo_segment_lens, prefill_kv_segment_lens, *args,
                                     qo_offset=prefill_qo_offset, **kwargs)
         return (True, split, batch_size, decode, prefill)
     else:
-        plan = _fmha_ppu_plan(qo_segment_lens, kv_segment_lens, *args,
+        plan = _fmha_sail_plan(qo_segment_lens, kv_segment_lens, *args,
                                     qo_offset=qo_offset, **kwargs)
         return (False, 0, batch_size, plan, None)
 
-def fmha_ppu(
+def fmha_sail(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
@@ -1604,7 +1604,7 @@ def fmha_ppu(
     v : torch.Tensor
         Same layout as ``k``.  The output head dimension follows ``v.shape[-1]``.
     plan_info : tuple
-        Return value from ``fmha_ppu_plan`` for the same lengths, head layout,
+        Return value from ``fmha_sail_plan`` for the same lengths, head layout,
         page size, and sparse/output mode.
     kv_indices : torch.Tensor, optional
         Paged-KV physical page table, flattened across the batch.  Required when
@@ -1643,7 +1643,7 @@ def fmha_ppu(
     """
     has_mixed_prefill, split, batch_size, decode, prefill = plan_info
     if not has_mixed_prefill:
-        return _fmha_ppu(q, k, v, decode, out=out, max_score=max_score, kv_indices=kv_indices,kv_block_indexes=kv_block_indexes, q_offset_override=q_offset_override, **kwargs)
+        return _fmha_sail(q, k, v, decode, out=out, max_score=max_score, kv_indices=kv_indices,kv_block_indexes=kv_block_indexes, q_offset_override=q_offset_override, **kwargs)
     else:
 
         decode_pack = decode.get("pack_factor", 1)
@@ -1687,13 +1687,13 @@ def fmha_ppu(
             prefill_qo_offset = None
 
         # ---- Run kernels ----
-        decode_out, decode_ms = _fmha_ppu(
+        decode_out, decode_ms = _fmha_sail(
             q_decode, k_decode, v_decode, decode,
             out=None, max_score=None,
             kv_indices=decode_kv_indices, kv_block_indexes=decode_block_idx,
             q_offset_override=decode_qo_offset,
             **kwargs)
-        prefill_out, prefill_ms = _fmha_ppu(
+        prefill_out, prefill_ms = _fmha_sail(
             q_prefill, k_prefill, v_prefill, prefill,
             out=None, max_score=None,
             kv_indices=prefill_kv_indices, kv_block_indexes=prefill_block_idx,
@@ -1752,7 +1752,7 @@ def sparse_topk_select(
     max_score : torch.Tensor
         Shape ``(num_qo_heads, max_k_tiles, total_qo_len)``, contiguous, float32.
         Slots beyond the actual KV tile count must be pre-filled with ``-inf``
-        (fmha_ppu does this automatically via ``torch.full``).
+        (fmha_sail does this automatically via ``torch.full``).
     topk : int
         Must be exactly 16.
     num_valid_pages : int, optional

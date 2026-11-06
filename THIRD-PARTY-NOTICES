@@ -1,5 +1,5 @@
-Third-party notices for fmha_ppu (MSA PPU/HGGC port)
-======================================================
+Third-party notices for msa_for_sail (MSA PPU/HGGC port)
+========================================================
 
 This file contains the full license texts of the third-party licenses
 used by bundled/derived sources in this repository. Per-component
@@ -12,7 +12,7 @@ Index
   TensorRT-LLM / NAVER (CLOVA) portions of sparse_topk_select.cuh;
   runtime deps `apache-tvm-ffi`, `ninja`
 * BSD 3-Clause            — vendored CUTLASS-derived headers under
-  csrc/include/; the ACTLIZE submodule (python/fmha_ppu/actlize/,
+  csrc/include/; the ACTLIZE submodule (python/msa_for_sail/actlize/,
   see its own LICENSE.txt); runtime deps `torch`, `jinja2`
 
 --------------------------------------------------------------------------------

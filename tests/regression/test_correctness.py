@@ -26,11 +26,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from conftest import fp8_test_dtypes
 from ref_attn import sdpa_ref_new
-from fmha_ppu import fmha_ppu as _fmha_ppu
-from fmha_ppu import fmha_ppu_plan
+from msa_for_sail import fmha_sail as _fmha_sail
+from msa_for_sail import fmha_sail_plan
 
 from functools import partial
-fmha_ppu = None
+fmha_sail = None
 
 page_sizes = [128]
 
@@ -98,12 +98,12 @@ def sdpa_ref(q_bf16, k_bf16, v_bf16, h_q, h_k, causal=True, qo_offset=None):
     return o_ref.reshape(b * q_len, h_q, q_bf16.shape[-1])
 
 
-def run_fmha_ppu(q, k, v, b, q_len, k_len, h_q, h_k, d, dtype, num_kv_splits, causal=True, qo_offset=None, output_maxscore=False, output_o=True):
+def run_fmha_sail(q, k, v, b, q_len, k_len, h_q, h_k, d, dtype, num_kv_splits, causal=True, qo_offset=None, output_maxscore=False, output_o=True):
     """Run FlashInfer CUTLASS FMHA. Returns (o,) or (o, max_score, max_k_tiles)."""
     device = q.device
     qo_lens = torch.full((b,), q_len, dtype=torch.int32)
     kv_lens = torch.full((b,), k_len, dtype=torch.int32)
-    plan_info = fmha_ppu_plan(qo_lens, kv_lens, h_q,
+    plan_info = fmha_sail_plan(qo_lens, kv_lens, h_q,
         causal=causal, qo_offset=qo_offset,
         num_kv_splits=num_kv_splits,
         output_maxscore=output_maxscore,
@@ -111,7 +111,7 @@ def run_fmha_ppu(q, k, v, b, q_len, k_len, h_q, h_k, d, dtype, num_kv_splits, ca
         device=device
     )
     torch.cuda.synchronize()
-    o, max_score = fmha_ppu(
+    o, max_score = fmha_sail(
         q, k, v,
         plan_info=plan_info,
         output_maxscore=output_maxscore,
@@ -233,7 +233,7 @@ def _run_case(b, q_len, k_len, h_q, h_k, d, dtype, num_kv_splits=-1, causal=True
     threshold = 0.99999 if dtype == torch.bfloat16 else 0.9995
 
     # Run 1: without maxscore (Off path)
-    o = run_fmha_ppu(q_fi, k_fi, v_fi, b, q_len, k_len, h_q, h_k, d, dtype, num_kv_splits, causal,
+    o = run_fmha_sail(q_fi, k_fi, v_fi, b, q_len, k_len, h_q, h_k, d, dtype, num_kv_splits, causal,
                        qo_offset=qo_offset_tensor, output_maxscore=False)
     passed = check(name, o, o_ref, threshold)
 
@@ -243,7 +243,7 @@ def _run_case(b, q_len, k_len, h_q, h_k, d, dtype, num_kv_splits=-1, causal=True
     if skip_maxscore:
         return passed
     try:
-        o2, max_score, max_k_tiles = run_fmha_ppu(q_fi, k_fi, v_fi, b, q_len, k_len, h_q, h_k, d, dtype, num_kv_splits, causal,
+        o2, max_score, max_k_tiles = run_fmha_sail(q_fi, k_fi, v_fi, b, q_len, k_len, h_q, h_k, d, dtype, num_kv_splits, causal,
                            qo_offset=qo_offset_tensor, output_maxscore=True, output_o=True)
         passed &= check(name + " +ms", o2, o_ref, threshold)
 
@@ -257,7 +257,7 @@ def _run_case(b, q_len, k_len, h_q, h_k, d, dtype, num_kv_splits=-1, causal=True
             passed &= check_maxscore(name, max_score, ms_ref)
 
         # Run 3: maxscore only (Mode 2: output_o=False, output_maxscore=True)
-        _, max_score2, _ = run_fmha_ppu(q_fi, k_fi, v_fi, b, q_len, k_len, h_q, h_k, d, dtype, num_kv_splits, causal,
+        _, max_score2, _ = run_fmha_sail(q_fi, k_fi, v_fi, b, q_len, k_len, h_q, h_k, d, dtype, num_kv_splits, causal,
                            qo_offset=qo_offset_tensor, output_maxscore=True, output_o=False)
         if causal and max_score2 is not None and ms_ref is not None:
             passed &= check_maxscore(name + " ms_only", max_score2, ms_ref)
@@ -353,13 +353,13 @@ def _run_case_paged(b, q_len, k_len, h_q, h_k, d, dtype, page_size=128, causal=T
 
     qo_lens = torch.full((b,), q_len, dtype=torch.int32)
     kv_lens = torch.full((b,), k_len, dtype=torch.int32)
-    plan_info = fmha_ppu_plan(qo_lens, kv_lens, h_q,
+    plan_info = fmha_sail_plan(qo_lens, kv_lens, h_q,
         causal=causal, qo_offset=qo_offset_tensor,
         page_size=page_size,
         num_kv_heads=h_k,
     )
     torch.cuda.synchronize()
-    o, _ = fmha_ppu(
+    o, _ = fmha_sail(
         q_fi, k_paged_fi, v_paged_fi, 
         plan_info=plan_info,
         kv_indices=kv_indices,
@@ -380,7 +380,7 @@ def _run_case_paged(b, q_len, k_len, h_q, h_k, d, dtype, page_size=128, causal=T
 
     try:
         torch.cuda.synchronize()
-        plan_info_ms = fmha_ppu_plan(qo_lens, kv_lens, h_q,
+        plan_info_ms = fmha_sail_plan(qo_lens, kv_lens, h_q,
             causal=causal, qo_offset=qo_offset_tensor,
             page_size=page_size,
             output_maxscore=True,
@@ -394,7 +394,7 @@ def _run_case_paged(b, q_len, k_len, h_q, h_k, d, dtype, page_size=128, causal=T
 
         # Mode 3: output_o=True, output_maxscore=True
         torch.cuda.synchronize()
-        o3, max_score3 = fmha_ppu(
+        o3, max_score3 = fmha_sail(
             q_fi, k_paged_fi, v_paged_fi, 
             plan_info=plan_info_ms,
             kv_indices=kv_indices,
@@ -407,7 +407,7 @@ def _run_case_paged(b, q_len, k_len, h_q, h_k, d, dtype, page_size=128, causal=T
 
         # Mode 2: output_o=False, output_maxscore=True
         torch.cuda.synchronize()
-        _, max_score2 = fmha_ppu(
+        _, max_score2 = fmha_sail(
             q_fi, k_paged_fi, v_paged_fi, 
             plan_info=plan_info_ms,
             kv_indices=kv_indices,
@@ -513,7 +513,7 @@ def _run_case_sparse(b, q_len, k_len, h_q, h_k, d, dtype, page_size=128,
     qo_lens = torch.full((b,), q_len, dtype=torch.int32)
     kv_lens = torch.full((b,), k_len, dtype=torch.int32)
     torch.cuda.synchronize()
-    plan_info = fmha_ppu_plan(qo_lens, kv_lens, h_q,
+    plan_info = fmha_sail_plan(qo_lens, kv_lens, h_q,
         causal=causal, qo_offset=qo_offset_tensor,
         page_size=page_size,
         kv_block_num=kv_block_num,
@@ -521,7 +521,7 @@ def _run_case_sparse(b, q_len, k_len, h_q, h_k, d, dtype, page_size=128,
         use_fp8_kvcache=(dtype == torch.float8_e4m3fn),
     )
     torch.cuda.synchronize()
-    o, _ = fmha_ppu(
+    o, _ = fmha_sail(
         q, k_pages_phys, v_pages_phys,
         plan_info=plan_info,
         kv_indices=kv_indices,
@@ -625,7 +625,7 @@ def _run_case_chaos(h_q, h_k, d, dtype, causal=True, seed=42, device="cuda:0"):
         q_fi, k_fi, v_fi = q_cat, k_cat, v_cat
 
     torch.cuda.synchronize()
-    plan_info = fmha_ppu_plan(qo_lens_tensor, kv_lens_tensor, h_q,
+    plan_info = fmha_sail_plan(qo_lens_tensor, kv_lens_tensor, h_q,
         causal=causal, qo_offset=qo_offset_tensor,
         split_prefill_decode = pd_split,
         num_kv_heads=h_k,
@@ -636,7 +636,7 @@ def _run_case_chaos(h_q, h_k, d, dtype, causal=True, seed=42, device="cuda:0"):
         name += f"{plan_info[4]['predicted_speedup']:.2f} "
 
     torch.cuda.synchronize()
-    o, _ = fmha_ppu(
+    o, _ = fmha_sail(
         q_fi, k_fi, v_fi, 
         plan_info=plan_info,
     )
@@ -704,7 +704,7 @@ def _run_case_chaos(h_q, h_k, d, dtype, causal=True, seed=42, device="cuda:0"):
     k_ref_flat = (k_fi.to(torch.bfloat16) if dtype == torch.float8_e4m3fn else k_fi)
 
     try:
-        plan_info_ms = fmha_ppu_plan(qo_lens_tensor, kv_lens_tensor, h_q,
+        plan_info_ms = fmha_sail_plan(qo_lens_tensor, kv_lens_tensor, h_q,
             causal=causal, qo_offset=qo_offset_tensor,
             output_maxscore=True,
             num_kv_heads=h_k,
@@ -716,7 +716,7 @@ def _run_case_chaos(h_q, h_k, d, dtype, causal=True, seed=42, device="cuda:0"):
 
         # Mode 3: output_o=True, output_maxscore=True
         torch.cuda.synchronize()
-        o3, max_score3 = fmha_ppu(
+        o3, max_score3 = fmha_sail(
             q_fi, k_fi, v_fi, 
             plan_info=plan_info_ms,
             output_o=True, output_maxscore=True,
@@ -735,7 +735,7 @@ def _run_case_chaos(h_q, h_k, d, dtype, causal=True, seed=42, device="cuda:0"):
 
         # Mode 2: output_o=False, output_maxscore=True
         torch.cuda.synchronize()
-        _, max_score2 = fmha_ppu(
+        _, max_score2 = fmha_sail(
             q_fi, k_fi, v_fi, 
             plan_info=plan_info_ms,
             output_o=False, output_maxscore=True,
@@ -763,7 +763,7 @@ def _run_case_chaos_paged(h_q, h_k, d, dtype, page_size, causal=True, seed=42, d
     Notes vs v2's test_case_chaos_paged:
       - v2 truncates KV to eff_kv_len = off + ql (since paged wrapper has no
         explicit qo_offset; offset is implicit = k_len - q_len).
-      - tmp's fmha_ppu accepts an explicit qo_offset_tensor (per batch), so
+      - fmha_sail accepts an explicit qo_offset_tensor (per batch), so
         we keep the full kv_lens AND pass qo_offset_tensor explicitly. This is
         more general and exercises a wider range of paged decode patterns.
     """
@@ -855,13 +855,13 @@ def _run_case_chaos_paged(h_q, h_k, d, dtype, page_size, causal=True, seed=42, d
     q_fi = q_cat.to(dtype) if dtype == torch.float8_e4m3fn else q_cat
 
     torch.cuda.synchronize()
-    plan_info = fmha_ppu_plan(qo_lens_tensor, kv_lens_tensor, h_q,
+    plan_info = fmha_sail_plan(qo_lens_tensor, kv_lens_tensor, h_q,
         causal=causal, qo_offset=qo_offset_tensor,
         split_prefill_decode = pd_split,
         page_size=page_size,
     )
     torch.cuda.synchronize()
-    o, _ = fmha_ppu(
+    o, _ = fmha_sail(
         q_fi, k_cache, v_cache, 
         plan_info=plan_info,
         kv_indices=kv_indices,
@@ -890,7 +890,7 @@ def _run_case_chaos_paged(h_q, h_k, d, dtype, page_size, causal=True, seed=42, d
 
     try:
         torch.cuda.synchronize()
-        plan_info_ms = fmha_ppu_plan(qo_lens_tensor, kv_lens_tensor, h_q,
+        plan_info_ms = fmha_sail_plan(qo_lens_tensor, kv_lens_tensor, h_q,
             causal=causal, qo_offset=qo_offset_tensor,
             page_size=page_size,
             output_maxscore=True,
@@ -902,7 +902,7 @@ def _run_case_chaos_paged(h_q, h_k, d, dtype, page_size, causal=True, seed=42, d
 
         # Mode 3: output_o=True, output_maxscore=True
         torch.cuda.synchronize()
-        o3, max_score3 = fmha_ppu(
+        o3, max_score3 = fmha_sail(
             q_fi, k_cache, v_cache, 
             plan_info=plan_info_ms,
             kv_indices=kv_indices,
@@ -922,7 +922,7 @@ def _run_case_chaos_paged(h_q, h_k, d, dtype, page_size, causal=True, seed=42, d
 
         torch.cuda.synchronize()
         # Mode 2: output_o=False, output_maxscore=True
-        _, max_score2 = fmha_ppu(
+        _, max_score2 = fmha_sail(
             q_fi, k_cache, v_cache, 
             plan_info=plan_info_ms,
             kv_indices=kv_indices,
@@ -950,7 +950,7 @@ def _run_case_chaos_sparse(h_q, h_k, d, dtype, page_size, kv_block_num,
       - per (batch, kv_head) pick a strictly-ascending subset of pages
         (block 0 always included, capped at min(kv_block_num, pages_per_seq))
       - assemble kv_block_indexes [total_qo, h_k, kv_block_num] with -1 pad
-      - call unified fmha_ppu with kv_block_num + kv_block_indexes
+      - call unified fmha_sail with kv_block_num + kv_block_indexes
 
     causal masking uses ORIGINAL kv positions (block_idx*page_size + j).
     pd_split is exercised — for mixed batches the unified API splits the
@@ -1105,7 +1105,7 @@ def _run_case_chaos_sparse(h_q, h_k, d, dtype, page_size, kv_block_num,
     q_fi = q_cat.to(dtype) if dtype == torch.float8_e4m3fn else q_cat
 
     torch.cuda.synchronize()
-    plan_info = fmha_ppu_plan(qo_lens_tensor, kv_lens_tensor, h_q,
+    plan_info = fmha_sail_plan(qo_lens_tensor, kv_lens_tensor, h_q,
         causal=causal, qo_offset=qo_offset_tensor,
         split_prefill_decode=pd_split,
         page_size=page_size,
@@ -1114,7 +1114,7 @@ def _run_case_chaos_sparse(h_q, h_k, d, dtype, page_size, kv_block_num,
         use_fp8_kvcache=(dtype == torch.float8_e4m3fn),
     )
     torch.cuda.synchronize()
-    o, _ = fmha_ppu(
+    o, _ = fmha_sail(
         q_fi, k_cache, v_cache,
         plan_info=plan_info,
         kv_indices=kv_indices,
@@ -1627,7 +1627,7 @@ def main():
                     q_ref, k_ref, v_ref = q_bf16, k_bf16, v_bf16
                 o_ref = sdpa_ref_new(q_ref, k_ref, v_ref, h_q, h_k, causal=True, qo_offset=k_len - q_len)
                 # Run without pre-alloc (baseline)
-                o_baseline = run_fmha_ppu(q_fi, k_fi, v_fi, b, q_len, k_len, h_q, h_k, 128, dtype, -1, causal=True,
+                o_baseline = run_fmha_sail(q_fi, k_fi, v_fi, b, q_len, k_len, h_q, h_k, 128, dtype, -1, causal=True,
                                             qo_offset=torch.full((b,), k_len - q_len, dtype=torch.int32))
                 # Run with pre-alloc out
                 out_buf = torch.empty_like(q_fi).to(torch.bfloat16)
@@ -1635,8 +1635,8 @@ def main():
                 qo_lens = torch.full((b,), q_len, dtype=torch.int32)
                 kv_lens = torch.full((b,), k_len, dtype=torch.int32)
                 qo_offset_t = torch.full((b,), k_len - q_len, dtype=torch.int32)
-                plan_info = fmha_ppu_plan(qo_lens, kv_lens, h_q, causal=True, qo_offset=qo_offset_t, num_kv_heads=h_k)
-                o_prealloc, _ = fmha_ppu(q_fi, k_fi, v_fi, plan_info=plan_info, out=out_buf)
+                plan_info = fmha_sail_plan(qo_lens, kv_lens, h_q, causal=True, qo_offset=qo_offset_t, num_kv_heads=h_k)
+                o_prealloc, _ = fmha_sail(q_fi, k_fi, v_fi, plan_info=plan_info, out=out_buf)
                 same_buf = (o_prealloc.data_ptr() == buf_ptr)
                 threshold = 0.99999 if dtype == torch.bfloat16 else 0.9995
                 passed_ref = check(name, o_prealloc, o_ref, threshold)
@@ -1691,9 +1691,9 @@ def main():
 if __name__ == "__main__":
 
     if "--check" in sys.argv:
-        fmha_ppu = partial(_fmha_ppu, check_input_valid=True)
+        fmha_sail = partial(_fmha_sail, check_input_valid=True)
     else:
-        fmha_ppu = _fmha_ppu
+        fmha_sail = _fmha_sail
 
     if len(sys.argv) >= 3 and sys.argv[1] == "--chaos-worker-dynamic":
         chaos_worker_main_dynamic(int(sys.argv[2]))

@@ -22,10 +22,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from conftest import fp8_test_dtypes
-from fmha_ppu import fmha_ppu as _fmha_ppu
-from fmha_ppu import fmha_ppu_plan
+from msa_for_sail import fmha_sail as _fmha_sail
+from msa_for_sail import fmha_sail_plan
 
-fmha_ppu = None
+fmha_sail = None
 
 page_sizes = [128]
 
@@ -155,7 +155,7 @@ def _run_case_maxscore(b, q_len, k_len, h_q, h_k, d, dtype,
     try:
         qo_lens = torch.full((b,), q_len, device=device, dtype=torch.int32)
         kv_lens = torch.full((b,), k_len, device=device, dtype=torch.int32)
-        plan_info = fmha_ppu_plan(
+        plan_info = fmha_sail_plan(
             qo_lens, kv_lens, h_q,
             causal=causal, qo_offset=qo_offset_tensor,
             num_kv_splits=num_kv_splits,
@@ -164,7 +164,7 @@ def _run_case_maxscore(b, q_len, k_len, h_q, h_k, d, dtype,
             device=device
         )
         torch.cuda.synchronize()
-        o, max_score = fmha_ppu(
+        o, max_score = fmha_sail(
             q_fi, k_fi, v_fi,
             plan_info=plan_info,
             output_maxscore=True,
@@ -279,7 +279,7 @@ def _run_case_paged_maxscore(b, q_len, k_len, h_q, h_k, d, dtype, page_size=128,
     passed = True
     try:
         torch.cuda.synchronize()
-        plan_info_ms = fmha_ppu_plan(qo_lens, kv_lens, h_q,
+        plan_info_ms = fmha_sail_plan(qo_lens, kv_lens, h_q,
             causal=causal, qo_offset=qo_offset_tensor,
             page_size=page_size,
             output_maxscore=True,
@@ -295,7 +295,7 @@ def _run_case_paged_maxscore(b, q_len, k_len, h_q, h_k, d, dtype, page_size=128,
 
         # Mode 2: output_o=False, output_maxscore=True
         torch.cuda.synchronize()
-        _, max_score = fmha_ppu(
+        _, max_score = fmha_sail(
             q_fi, k_paged_fi, v_paged_fi,
             plan_info=plan_info_ms,
             kv_indices=kv_indices,
@@ -466,8 +466,8 @@ def main():
 
 if __name__ == "__main__":
     if "--check" in sys.argv:
-        fmha_ppu = partial(_fmha_ppu, check_input_valid=True)
+        fmha_sail = partial(_fmha_sail, check_input_valid=True)
     else:
-        fmha_ppu = _fmha_ppu
+        fmha_sail = _fmha_sail
 
     main()

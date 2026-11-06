@@ -23,8 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
 
-from fmha_ppu import fmha_ppu_plan
-from fmha_ppu.api import _compute_pack_factor
+from msa_for_sail import fmha_sail_plan
+from msa_for_sail.api import _compute_pack_factor
 
 
 def _decode_packed_work(plan_info):
@@ -204,7 +204,7 @@ def run_test(B, Q, kv_len, H_Q, H_K, D, causal, page_size, num_kv_splits, label)
     qo_tile_size = 128 if Q * pf <= 128 else 256
     kv_tile_size = 256 if qo_tile_size == 128 else 128
 
-    plan = fmha_ppu_plan(
+    plan = fmha_sail_plan(
         qo_lens, kv_lens, H_Q,
         causal=causal,
         qo_offset=qo_offset,

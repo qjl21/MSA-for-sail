@@ -3,12 +3,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 MiniMax
 # SPDX-License-Identifier: MIT
 
-"""PPU FMHA sweep benchmark using this repository's public fmha_ppu API.
+"""PPU FMHA sweep benchmark using this repository's public fmha_sail API.
 
 Mirrors the section layout and table format of the reference
 ``minimax-inference/third_party/fmha_sm100/tests/bench_sm100_fmha.py`` so the
-two outputs can be compared row-for-row. Uses the dense ``fmha_ppu`` /
-``fmha_ppu_plan`` API exposed at the package root, which supports ragged,
+two outputs can be compared row-for-row. Uses the dense ``fmha_sail`` /
+``fmha_sail_plan`` API exposed at the package root, which supports ragged,
 paged (``kv_indices``), and sparse (``kv_block_indexes``) paths.
 
 Sections:
@@ -34,8 +34,8 @@ import torch
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "python"))
 
-from fmha_ppu.bench_utils import bench_gpu_time, attention_tflops  # noqa: E402
-from fmha_ppu import fmha_ppu, fmha_ppu_plan  # noqa: E402
+from msa_for_sail.bench_utils import bench_gpu_time, attention_tflops  # noqa: E402
+from msa_for_sail import fmha_sail, fmha_sail_plan  # noqa: E402
 
 # ─── Hardware constants ───
 #PEAK_TFLOPS = {"fp8": 4500.0, "bf16": 2250.0} # B200
@@ -154,7 +154,7 @@ def bench_dense(b, h_q, h_k, q_len, k_len, d, output_mode, causal, dtype_str,
     qo_lens = torch.full((b,), q_len, dtype=torch.int32)
     kv_lens = torch.full((b,), k_len, dtype=torch.int32)
 
-    plan_info = fmha_ppu_plan(qo_lens, kv_lens, h_q,
+    plan_info = fmha_sail_plan(qo_lens, kv_lens, h_q,
         num_kv_splits=num_kv_splits,
         output_maxscore=True,
         num_kv_heads=h_k,
@@ -168,7 +168,7 @@ def bench_dense(b, h_q, h_k, q_len, k_len, d, output_mode, causal, dtype_str,
     maxscore_elems = h_q * ((k_len + 127) // 128) * b * q_len
     skip_maxscore = maxscore_elems >= (1 << 31)
     want_maxscore = output_mode in ("maxscore", "full") and not skip_maxscore
-    fun = lambda: fmha_ppu(q, k, v,
+    fun = lambda: fmha_sail(q, k, v,
         plan_info=plan_info, out=out,
         output_maxscore=want_maxscore,
         output_o=output_mode in ("o", "full") or skip_maxscore,
@@ -219,7 +219,7 @@ def bench_paged(b, h_q, h_k, q_len, k_len, d, output_mode, causal, dtype_str,
     qo_offset_val = k_len - q_len if causal else 0
     qo_offset_tensor = torch.full((b,), qo_offset_val, dtype=torch.int32) if causal else None
 
-    plan_info = fmha_ppu_plan(qo_lens, kv_lens, h_q,
+    plan_info = fmha_sail_plan(qo_lens, kv_lens, h_q,
         qo_offset=qo_offset_tensor,
         page_size=page_size,
         output_maxscore=True,
@@ -232,7 +232,7 @@ def bench_paged(b, h_q, h_k, q_len, k_len, d, output_mode, causal, dtype_str,
     maxscore_elems = h_q * ((k_len + 127) // 128) * b * q_len
     skip_maxscore = maxscore_elems >= (1 << 31)
     want_maxscore = output_mode in ("maxscore", "full") and not skip_maxscore
-    fun = lambda: fmha_ppu(q, k_cache, v_cache,
+    fun = lambda: fmha_sail(q, k_cache, v_cache,
         plan_info=plan_info, kv_indices=kv_indices, out=out,
         output_maxscore=want_maxscore,
         output_o=output_mode in ("o", "full") or skip_maxscore,
@@ -256,7 +256,7 @@ def bench_sparse(b, h_q, h_k, q_len, k_len, d, output_mode, causal, dtype_str,
                  page_size=128, topk=16, use_mbu=False):
     """Sparse paged path with the first top-K pages selected for every token.
 
-    bf16/fp8 go through the root fmha_ppu dense entry (kv_block_indexes).
+    bf16/fp8 go through the root fmha_sail dense entry (kv_block_indexes).
     """
     if topk not in (4, 8, 16, 32):
         raise ValueError(f"sparse topk must be one of 4/8/16/32, got {topk}")
@@ -290,7 +290,7 @@ def bench_sparse(b, h_q, h_k, q_len, k_len, d, output_mode, causal, dtype_str,
     selected_blocks = torch.arange(actual_block_num, device=device, dtype=torch.int32)
     kv_block_indexes[:, :, :actual_block_num] = selected_blocks.view(1, 1, -1)
 
-    plan_info = fmha_ppu_plan(qo_lens, kv_lens, h_q,
+    plan_info = fmha_sail_plan(qo_lens, kv_lens, h_q,
         qo_offset=qo_offset_tensor,
         page_size=page_size,
         kv_block_num=kv_block_num,
@@ -299,7 +299,7 @@ def bench_sparse(b, h_q, h_k, q_len, k_len, d, output_mode, causal, dtype_str,
 
     out = torch.empty_like(q).to(torch.bfloat16)
 
-    fun = lambda: fmha_ppu(
+    fun = lambda: fmha_sail(
         q, k_cache, v_cache,
         plan_info=plan_info,
         kv_indices=kv_indices, out=out,
