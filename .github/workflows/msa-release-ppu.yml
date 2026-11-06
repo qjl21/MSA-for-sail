@@ -1,0 +1,119 @@
+name: msa release     # Build the fmha_ppu wheel and publish it via the shared release template
+
+# Call the standalone template repository matrix-release; `uses` and `template_ref`
+# must reference the same version. The template composes the SAIL build image from the
+# python/os/runtime/torch/sdk version inputs and publishes the wheel to the internal index.
+# Configure RELEASE_USERNAME, RELEASE_TOKEN, DATA_TOKEN (and TEMPLATE_TOKEN for the private
+# template) as Actions secrets in this repository or at the org level with access granted here.
+on:
+  # Trigger automatically on release tags, or manually with the parameters below.
+  # MSA release tags look like `0.1.1+v0.1.0` (FMHA_PPU_VERSION+RELEASE_VERSION in setup.py),
+  # and setup.py matches that exact tag via git describe to compose the wheel version.
+  push:
+    tags: ['*\+v*']
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: 'Package name to build and publish; leave empty to read [project].name from pyproject.toml'
+        required: false
+        type: string
+        default: ''
+      framework:
+        description: 'Name of the required framework, e.g. torch'
+        required: true
+        type: string
+        default: torch
+      python_versions:
+        description: 'JSON array; available values: 38, 310, 312'
+        required: true
+        type: string
+        default: '["312"]'
+      os_versions:
+        description: 'JSON array; available values: ubuntu2004, ubuntu2204, ubuntu2404, alios7u2'
+        required: true
+        type: string
+        default: '["ubuntu2404"]'
+      runtime_versions:
+        description: 'JSON array; available values: 2, 3'
+        required: true
+        type: string
+        default: '["3"]'
+      torch_versions:
+        description: 'JSON array; available values: 2.8.0, 2.10.0, 2.13.0; [""] omits the Torch version'
+        required: true
+        type: string
+        default: '["2.10.0"]'
+      sdk_versions:
+        description: 'JSON array; available values: 2.1.0, 2.2.0'
+        required: true
+        type: string
+        default: '["2.2.0"]'
+      tag_version:
+        description: 'Code version: manually specify a tag when building and publishing multiple wheel packages'
+        required: false
+        type: string
+      build_command:
+        description: 'Build command'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  # Single source of truth for the distribution name: read [project].name from
+  # pyproject.toml rather than hardcoding it, so a rename only touches packaging metadata.
+  meta:
+    name: Read package name
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      package_name: ${{ steps.name.outputs.package_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: name
+        name: Parse [project].name from pyproject.toml
+        shell: bash
+        run: |
+          set -euo pipefail
+          pkg=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["name"])')
+          test -n "$pkg"
+          echo "package_name=$pkg" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: meta
+    uses: t-head/ci-infra/.github/workflows/matrix-release.yml@main
+    permissions:
+      contents: write
+    secrets:
+      template_token: ${{ secrets.TEMPLATE_TOKEN }}
+      release_username: ${{ secrets.RELEASE_USERNAME }}
+      release_token: ${{ secrets.RELEASE_TOKEN }}
+      data_token: ${{ secrets.DATA_TOKEN }}
+    with:
+      # Manual runs use the specified parameters; tag pushes have no inputs and use the same defaults.
+      # package_name comes from pyproject.toml (meta job) unless overridden at dispatch.
+      package_name: ${{ inputs.package_name || needs.meta.outputs.package_name }}
+      framework: ${{ inputs.framework || 'torch' }}
+      template_repository: t-head/ci-infra
+      template_ref: main
+      python_versions: ${{ inputs.python_versions || '["312"]' }}
+      os_versions: ${{ inputs.os_versions || '["ubuntu2404"]' }}
+      runtime_versions: ${{ inputs.runtime_versions || '["3"]' }}
+      torch_versions: ${{ inputs.torch_versions || '["2.10.0"]' }}
+      sdk_versions: ${{ inputs.sdk_versions || '["2.2.0"]' }}
+      tag_version: ${{ inputs.tag_version || '' }}
+      build_command: |
+        ${{ inputs.build_command || 'unset PIP_INDEX_URL
+        git config --global --unset-all url.https://ai-gerrit.eng.t-head.cn/Public/Github/.insteadOf 2>/dev/null || true
+        git config --global --add safe.directory "*"
+        source /usr/local/PPU_SDK/envsetup.sh || true
+        which hgcc || true
+        echo $PPU_SDK
+        pip install setuptools==69.5.1
+        pip install setuptools-scm==9.2.2
+        pip install wheel ninja
+        git submodule update --init --recursive
+        python3 setup.py bdist_wheel' }}
