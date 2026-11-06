@@ -12,13 +12,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
 
 import math
 import torch
-from fmha_ppu import fmha_ppu, fmha_ppu_plan
+from msa_for_sail import fmha_sail, fmha_sail_plan
 
 def _run(q, k, v, qo_lens, kv_lens, h_q, h_k, output_o=True, output_maxscore=True, causal=True):
-    plan = fmha_ppu_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_k,
+    plan = fmha_sail_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_k,
                            causal=causal, output_maxscore=output_maxscore)
     torch.cuda.synchronize()
-    o, ms = fmha_ppu(q, k, v, plan_info=plan,
+    o, ms = fmha_sail(q, k, v, plan_info=plan,
                        output_o=output_o, output_maxscore=output_maxscore)
     torch.cuda.synchronize()
     return o, ms

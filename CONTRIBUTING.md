@@ -1,7 +1,7 @@
 # Contributing to MSA
 
 Thank you for your interest in contributing to **MSA** (MiniMax Sparse
-Attention, package `fmha_ppu`)! This document covers the contribution
+Attention, package `msa_for_sail`)! This document covers the contribution
 process, what we look for in a change, and the coding conventions we follow.
 
 It deliberately does not repeat setup details: environment requirements,
@@ -88,11 +88,11 @@ Then, for each change:
 
 These need extra discussion before we can accept them:
 
-- **Public API changes.** `fmha_ppu.api` is the stable entry point;
+- **Public API changes.** `msa_for_sail.api` is the stable entry point;
   everything else is internal and may change without notice. New arguments,
   changed defaults, different return shapes, or altered dtype/layout contracts
   affect downstream callers, so open an issue to agree on the design first.
-- **Vendored and derived code.** `python/fmha_ppu/csrc/include/` and the
+- **Vendored and derived code.** `python/msa_for_sail/csrc/include/` and the
   `actlize/` submodule derive from FlashInfer, CUTLASS, TensorRT-LLM, and
   T-Head ACTLIZE. Wide reformatting or renaming there costs us future upstream
   merges; keep diffs minimal and preserve provenance comments.

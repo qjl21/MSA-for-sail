@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 MiniMax
 # SPDX-License-Identifier: MIT
 
-"""Correctness tests for mixed prefill/decode split in fmha_ppu.
+"""Correctness tests for mixed prefill/decode split in fmha_sail.
 
 Verifies that splitting a batch into decode (qo_len<=128) + prefill (qo_len>128)
 and running two separate kernels produces the same result as running each part
@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fmha_ppu.api import fmha_ppu_plan, fmha_ppu, _fmha_ppu_plan, _fmha_ppu
+from msa_for_sail.api import fmha_sail_plan, fmha_sail, _fmha_sail_plan, _fmha_sail
 from ref_attn import sdpa_ref_new
 
 failed_cases = []
@@ -135,25 +135,25 @@ def test_split_matches_nosplit():
     decode_kv_nnz = sum(decode_kv)
 
     # --- Run decode-only (no split) ---
-    d_plan = _fmha_ppu_plan(
+    d_plan = _fmha_sail_plan(
         qo_lens_t[:len(decode_qo)], kv_lens_t[:len(decode_qo)],
         h_q, num_kv_heads=h_k, causal=True,
         qo_offset=qo_offset_t[:len(decode_qo)])
-    d_out, _ = _fmha_ppu(
+    d_out, _ = _fmha_sail(
         q[:decode_nnz], k[:decode_kv_nnz], v[:decode_kv_nnz], d_plan)
 
     # --- Run prefill-only (no split) ---
-    p_plan = _fmha_ppu_plan(
+    p_plan = _fmha_sail_plan(
         qo_lens_t[len(decode_qo):], kv_lens_t[len(decode_qo):],
         h_q, num_kv_heads=h_k, causal=True,
         qo_offset=qo_offset_t[len(decode_qo):])
-    p_out, _ = _fmha_ppu(
+    p_out, _ = _fmha_sail(
         q[decode_nnz:], k[decode_kv_nnz:], v[decode_kv_nnz:], p_plan)
 
     ref_out = torch.cat([d_out, p_out], dim=0)
 
     # --- Run combined (triggers split) ---
-    plan_info = fmha_ppu_plan(
+    plan_info = fmha_sail_plan(
         qo_lens_t, kv_lens_t, h_q,
         qo_offset=qo_offset_t, causal=True, num_kv_heads=h_k,
         split_prefill_decode=True)
@@ -162,7 +162,7 @@ def test_split_matches_nosplit():
     assert has_mixed, "Expected mixed prefill/decode split"
     assert split_idx == len(decode_qo), f"Expected split at {len(decode_qo)}, got {split_idx}"
 
-    combined_out, _ = fmha_ppu(q, k, v, plan_info=plan_info)
+    combined_out, _ = fmha_sail(q, k, v, plan_info=plan_info)
     torch.cuda.synchronize()
 
     return check("split_matches_nosplit", combined_out, ref_out, threshold=0.99999)
@@ -183,11 +183,11 @@ def test_split_vs_sdpa():
     o_ref = sdpa_ref_varlen_new(q, k, v, qo_lens, kv_lens, h_q, h_k,
                             qo_offset=[kl - ql for ql, kl in zip(qo_lens, kv_lens)])
 
-    plan_info = fmha_ppu_plan(
+    plan_info = fmha_sail_plan(
         qo_lens_t, kv_lens_t, h_q,
         qo_offset=qo_offset_t, causal=True, num_kv_heads=h_k)
 
-    out, _ = fmha_ppu(q, k, v, plan_info=plan_info)
+    out, _ = fmha_sail(q, k, v, plan_info=plan_info)
     torch.cuda.synchronize()
 
     return check("split_vs_sdpa", out, o_ref, threshold=0.9999)
@@ -208,11 +208,11 @@ def test_split_gqa():
     o_ref = sdpa_ref_varlen_new(q, k, v, qo_lens, kv_lens, h_q, h_k,
                             qo_offset=[kl - ql for ql, kl in zip(qo_lens, kv_lens)])
 
-    plan_info = fmha_ppu_plan(
+    plan_info = fmha_sail_plan(
         qo_lens_t, kv_lens_t, h_q,
         qo_offset=qo_offset_t, causal=True, num_kv_heads=h_k)
 
-    out, _ = fmha_ppu(q, k, v, plan_info=plan_info)
+    out, _ = fmha_sail(q, k, v, plan_info=plan_info)
     torch.cuda.synchronize()
 
     return check("split_gqa", out, o_ref, threshold=0.9999)
@@ -264,11 +264,11 @@ def test_split_paged():
     kv_lens_t = torch.tensor(kv_lens, dtype=torch.int32)
     qo_offset_t = torch.tensor(qo_offset_list, dtype=torch.int32)
 
-    plan_info = fmha_ppu_plan(
+    plan_info = fmha_sail_plan(
         qo_lens_t, kv_lens_t, h_q,
         qo_offset=qo_offset_t, causal=True, num_kv_heads=h_k, page_size=page_size)
 
-    out, _ = fmha_ppu(q, k_paged, v_paged, plan_info=plan_info, kv_indices=kv_indices)
+    out, _ = fmha_sail(q, k_paged, v_paged, plan_info=plan_info, kv_indices=kv_indices)
     torch.cuda.synchronize()
 
     return check("split_paged", out, o_ref, threshold=0.9999)
@@ -286,12 +286,12 @@ def test_split_maxscore():
     q, k, v, qo_lens_t, kv_lens_t, qo_offset_t = make_inputs(
         qo_lens, kv_lens, h_q, h_k, d, device)
 
-    plan_info = fmha_ppu_plan(
+    plan_info = fmha_sail_plan(
         qo_lens_t, kv_lens_t, h_q,
         qo_offset=qo_offset_t, causal=True, num_kv_heads=h_k,
         output_maxscore=True)
 
-    out, ms = fmha_ppu(q, k, v, plan_info=plan_info, output_maxscore=True)
+    out, ms = fmha_sail(q, k, v, plan_info=plan_info, output_maxscore=True)
     torch.cuda.synchronize()
 
     passed = True

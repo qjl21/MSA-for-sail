@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
 
 import torch
-from fmha_ppu import sparse_topk_select
+from msa_for_sail import sparse_topk_select
 
 
 def test_forced_blocks(

@@ -5,7 +5,7 @@
 """Per-variant lazy JIT compilation for FMHA varlen kernels.
 
 Each FMHA variant (dtype x tile x sparse x page x split_kv x pack_factor) is compiled
-independently on first use and cached to ~/.cache/minfer/fmha_ppu/.
+independently on first use and cached to ~/.cache/minfer/msa_for_sail/.
 
 To recompile after kernel changes: scripts/clear_fmha_cache.sh
 """
@@ -59,7 +59,7 @@ def _compute_cache_base():
     explicit = os.environ.get("MINFER_FMHA_CACHE_DIR")
     if explicit:
         return Path(explicit)
-    base = Path(os.path.expanduser("~/.cache/minfer/fmha_ppu"))
+    base = Path(os.path.expanduser("~/.cache/minfer/msa_for_sail"))
     # Different build configs get separate cache dirs to avoid conflicts
     suffix = ""
     if os.environ.get("GPU_TRACE") is not None:
@@ -92,7 +92,7 @@ _FLOAT8_E4M3FN_CODE = (12 << 16) | (8 << 8) | 1  # 788481
 # dtype_in is both the compute and the gmem storage type: plain bf16 kernels,
 # or the fp8 entry which keeps Q/K in fp8 end-to-end (fp8 TensorCell MMA,
 # OnlyScore). OnlyScoreBF16 stores max_score as bf16; all other modes float32.
-_FMHA_PPU_DISPATCH = [
+_MSA_SAIL_DISPATCH = [
     ("int64_t dtype_code", [
         (_BFLOAT16_CODE,      {"dtype_in": "ppu_bfloat16",   "cutlass_dtype_out": "cutlass::bfloat16_t"}),
         (_FLOAT8_E4M3FN_CODE, {"dtype_in": "__hg_fp8_e4m3", "cutlass_dtype_out": "cutlass::bfloat16_t"}),
@@ -126,7 +126,7 @@ _FMHA_PPU_DISPATCH = [
     ("int pack_factor", [(i, {"pack_factor": i}) for i in _PACK_FACTORS]),
 ]
 
-_FMHA_PPU_IMPOSSIBLE = lambda p: (
+_MSA_SAIL_IMPOSSIBLE = lambda p: (
     (p.get("page_size") == -1 and p.get("sparse_mode") == "Sparse")
     or (p.get("dtype_in") == "__hg_fp8_e4m3"
         and p.get("sparse_mode") not in ("OnlyScore", "OnlyScoreBF16", "Sparse"))
@@ -149,7 +149,7 @@ def _dlpack_dtype_code(torch_dtype):
 def _variant_key_from_runtime(dtype_code, qo_tile_size, kv_tile_size,
                                single_wg, sparse_mode, page_size, split_kv, pack_factor):
     """Compute a variant key string from runtime parameters."""
-    dims = _FMHA_PPU_DISPATCH
+    dims = _MSA_SAIL_DISPATCH
 
     def _match_idx(dim_values, runtime_val):
         # Convert Python bool to string to match dispatch table ("true"/"false")
@@ -172,10 +172,10 @@ def _variant_key_from_runtime(dtype_code, qo_tile_size, kv_tile_size,
         _, tparams = dim_values[idx]
         params.update(tparams)
 
-    if _FMHA_PPU_IMPOSSIBLE(params):
+    if _MSA_SAIL_IMPOSSIBLE(params):
         raise ValueError(f"Impossible FMHA variant combination: {params}")
 
-    func_name = "fmha_ppu_" + "_".join(str(i) for i in indices)
+    func_name = "msa_for_sail_" + "_".join(str(i) for i in indices)
     variant_name = "_".join(str(i) for i in indices)
     params["func_name"] = func_name
     params["variant_name"] = variant_name
@@ -343,7 +343,7 @@ class FMHAVariantManager:
         if self._inst_template is None:
             with open(_FMHA_VARLEN_DIR / "fmha_sm80_inst.jinja") as f:
                 self._inst_template = jinja2.Template(f.read())
-            with open(_FMHA_VARLEN_DIR / "fmha_ppu_variant_run.cu.jinja") as f:
+            with open(_FMHA_VARLEN_DIR / "fmha_sail_variant_run.cu.jinja") as f:
                 self._run_template = jinja2.Template(f.read())
 
     def _ensure_all_module(self):
@@ -411,7 +411,7 @@ class FMHAVariantManager:
         inst_cu.write_text(self._inst_template.render(**params))
         run_cu.write_text(self._run_template.render(**params))
 
-        for name in ["fmha_ppu_params.h", "msa_profiling_interface.hpp",
+        for name in ["fmha_sail_params.h", "msa_profiling_interface.hpp",
                      "tvm_ffi_utils.h", "gmem_bounds_check.h"]:
             src = _FMHA_VARLEN_DIR / name
             dst = cache_dir / name

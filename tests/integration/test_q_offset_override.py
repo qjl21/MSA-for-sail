@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 MiniMax
 # SPDX-License-Identifier: MIT
 
-"""Correctness tests for q_offset_override in fmha_ppu.
+"""Correctness tests for q_offset_override in fmha_sail.
 
 Tests that overriding qo_offset at run time (without re-planning) produces
 the same result as planning with that offset from the start.
@@ -23,7 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fmha_ppu import fmha_ppu, fmha_ppu_plan
+from msa_for_sail import fmha_sail, fmha_sail_plan
 from ref_attn import sdpa_ref_new
 
 
@@ -105,11 +105,11 @@ def test_override_int_same_as_plan():
     kv_lens = torch.full((b,), k_len, dtype=torch.int32)
     qo_offset = torch.full((b,), offset_val, dtype=torch.int32)
 
-    plan = fmha_ppu_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_k,
+    plan = fmha_sail_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_k,
                            qo_offset=qo_offset, device=device)
 
-    o_baseline, _ = fmha_ppu(q, k, v, plan_info=plan)
-    o_override_int, _ = fmha_ppu(q, k, v, plan_info=plan,
+    o_baseline, _ = fmha_sail(q, k, v, plan_info=plan)
+    o_override_int, _ = fmha_sail(q, k, v, plan_info=plan,
                                    q_offset_override=offset_val)
     torch.cuda.synchronize()
     return check("override_int == baseline", o_override_int, o_baseline)
@@ -133,12 +133,12 @@ def test_override_tensor_same_as_plan():
     kv_lens = torch.full((b,), k_len, dtype=torch.int32)
     qo_offset = torch.full((b,), offset_val, dtype=torch.int32)
 
-    plan = fmha_ppu_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_k,
+    plan = fmha_sail_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_k,
                            qo_offset=qo_offset, device=device)
 
-    o_baseline, _ = fmha_ppu(q, k, v, plan_info=plan)
+    o_baseline, _ = fmha_sail(q, k, v, plan_info=plan)
     override_tensor = torch.full((b,), offset_val, dtype=torch.int32, device=device)
-    o_override, _ = fmha_ppu(q, k, v, plan_info=plan,
+    o_override, _ = fmha_sail(q, k, v, plan_info=plan,
                                q_offset_override=override_tensor)
     torch.cuda.synchronize()
     return check("override_tensor == baseline", o_override, o_baseline)
@@ -170,12 +170,12 @@ def test_override_plan_no_causal_override_causal():
     kv_lens = torch.full((b,), k_len, dtype=torch.int32)
 
     # Plan WITHOUT causal — plan sees full KV range
-    plan_wide = fmha_ppu_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_k,
+    plan_wide = fmha_sail_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_k,
                                 causal=False, device=device)
 
     # Override with real causal offset at run time
     override_tensor = torch.full((b,), real_offset, dtype=torch.int32, device=device)
-    o_override, _ = fmha_ppu(q, k, v, plan_info=plan_wide,
+    o_override, _ = fmha_sail(q, k, v, plan_info=plan_wide,
                                q_offset_override=override_tensor)
     torch.cuda.synchronize()
     return check("plan_no_causal + override vs ref", o_override, o_ref, threshold=0.9999)
@@ -206,11 +206,11 @@ def test_override_tighter_offset():
     kv_lens = torch.full((b,), k_len, dtype=torch.int32)
     plan_qo_offset = torch.full((b,), plan_offset, dtype=torch.int32)
 
-    plan = fmha_ppu_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_k,
+    plan = fmha_sail_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_k,
                            qo_offset=plan_qo_offset, device=device)
 
     override_tensor = torch.full((b,), real_offset, dtype=torch.int32, device=device)
-    o_override, _ = fmha_ppu(q, k, v, plan_info=plan,
+    o_override, _ = fmha_sail(q, k, v, plan_info=plan,
                                q_offset_override=override_tensor)
     torch.cuda.synchronize()
     return check("tighter_offset vs ref", o_override, o_ref, threshold=0.9999)
@@ -240,10 +240,10 @@ def test_override_none():
     kv_lens = torch.full((b,), k_len, dtype=torch.int32)
     qo_offset = torch.full((b,), offset_val, dtype=torch.int32)
 
-    plan = fmha_ppu_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_k,
+    plan = fmha_sail_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_k,
                            qo_offset=qo_offset, device=device)
 
-    o_none, _ = fmha_ppu(q, k, v, plan_info=plan, q_offset_override=None)
+    o_none, _ = fmha_sail(q, k, v, plan_info=plan, q_offset_override=None)
     torch.cuda.synchronize()
     return check("override=None vs ref", o_none, o_ref)
 
@@ -286,13 +286,13 @@ def test_override_split_prefill_decode():
     qo_offset_t = torch.tensor(offsets, dtype=torch.int32)
 
     # Plan with the real offsets, split_prefill_decode=True
-    plan = fmha_ppu_plan(qo_lens_t, kv_lens_t, h_q, num_kv_heads=h_k,
+    plan = fmha_sail_plan(qo_lens_t, kv_lens_t, h_q, num_kv_heads=h_k,
                            qo_offset=qo_offset_t, split_prefill_decode=True,
                            device=device)
 
     # Run with override = same offsets (on GPU)
     override_tensor = torch.tensor(offsets, dtype=torch.int32, device=device)
-    o_override, _ = fmha_ppu(q, k, v, plan_info=plan,
+    o_override, _ = fmha_sail(q, k, v, plan_info=plan,
                                q_offset_override=override_tensor)
     torch.cuda.synchronize()
     p1 = check("split_pd override_tensor vs ref", o_override, o_ref)
@@ -302,10 +302,10 @@ def test_override_split_prefill_decode():
     max_offset = max(offsets)
     # Re-plan with uniform large offset so all batches have the same wide plan
     uniform_offset = torch.full((b,), max_offset, dtype=torch.int32)
-    plan_wide = fmha_ppu_plan(qo_lens_t, kv_lens_t, h_q, num_kv_heads=h_k,
+    plan_wide = fmha_sail_plan(qo_lens_t, kv_lens_t, h_q, num_kv_heads=h_k,
                                 qo_offset=uniform_offset, split_prefill_decode=True,
                                 device=device)
-    o_override_int, _ = fmha_ppu(q, k, v, plan_info=plan_wide,
+    o_override_int, _ = fmha_sail(q, k, v, plan_info=plan_wide,
                                    q_offset_override=max_offset)
     # Compute ref with uniform offset
     o_ref_uniform_list = []
@@ -371,12 +371,12 @@ def test_override_varlen_per_batch():
     # Plan with wide offsets (kv_len - qo_len per batch, the maximum possible)
     wide_offsets = [kl - ql for ql, kl in zip(q_lens, kv_lens)]
     plan_offset_t = torch.tensor(wide_offsets, dtype=torch.int32)
-    plan = fmha_ppu_plan(qo_lens_t, kv_lens_t, h_q, num_kv_heads=h_k,
+    plan = fmha_sail_plan(qo_lens_t, kv_lens_t, h_q, num_kv_heads=h_k,
                            qo_offset=plan_offset_t, device=device)
 
     # Override with tighter real offsets
     override_t = torch.tensor(real_offsets, dtype=torch.int32, device=device)
-    o_override, _ = fmha_ppu(q, k, v, plan_info=plan,
+    o_override, _ = fmha_sail(q, k, v, plan_info=plan,
                                q_offset_override=override_t)
     torch.cuda.synchronize()
     return check("varlen per-batch override vs ref", o_override, o_ref, threshold=0.9999)
@@ -406,18 +406,18 @@ def test_override_decode():
     kv_lens = torch.full((b,), k_len, dtype=torch.int32)
     qo_offset = torch.full((b,), real_offset, dtype=torch.int32)
 
-    plan = fmha_ppu_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_k,
+    plan = fmha_sail_plan(qo_lens, kv_lens, h_q, num_kv_heads=h_k,
                            qo_offset=qo_offset, device=device)
 
     # Override with int
-    o_int, _ = fmha_ppu(q, k, v, plan_info=plan,
+    o_int, _ = fmha_sail(q, k, v, plan_info=plan,
                           q_offset_override=real_offset)
     torch.cuda.synchronize()
     p1 = check("decode override_int vs ref", o_int, o_ref)
 
     # Override with GPU tensor
     override_t = torch.full((b,), real_offset, dtype=torch.int32, device=device)
-    o_tensor, _ = fmha_ppu(q, k, v, plan_info=plan,
+    o_tensor, _ = fmha_sail(q, k, v, plan_info=plan,
                              q_offset_override=override_t)
     torch.cuda.synchronize()
     p2 = check("decode override_tensor vs ref", o_tensor, o_ref)

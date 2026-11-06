@@ -8,13 +8,13 @@ Trimmed from test_sparse_attn_e2e_proxy_kv.py to the bare main path:
 
     KV cache A (proxy, MQA-compressed)
         ↓
-    fmha_ppu dense (num_kv_heads=1) → max_score
+    fmha_sail dense (num_kv_heads=1) → max_score
         ↓
     sparse_topk_select → kv_block_indexes (T, num_kv_heads_real, topk)
         ↓
     KV cache B (real, GQA, full precision)
         ↓
-    fmha_ppu sparse (batch=T, num_kv_heads=num_kv_heads_real) → o
+    fmha_sail sparse (batch=T, num_kv_heads=num_kv_heads_real) → o
 
 Default: run the pipeline once + shape/dtype/NaN sanity checks.
 With --check: also run the full topk-selection multiset check + PyTorch
@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
 
-from fmha_ppu import fmha_ppu, fmha_ppu_plan, sparse_topk_select
+from msa_for_sail import fmha_sail, fmha_sail_plan, sparse_topk_select
 
 
 def verify_topk_selection(max_score, kv_block_indexes, topk, atol=1e-4):
@@ -112,12 +112,12 @@ def run(check=False, seed=0,
     qo_segment_lens_d = torch.tensor([total_qo_len], dtype=torch.int32)
     kv_segment_lens_d = torch.tensor([kv_len], dtype=torch.int32)
     kv_indices_d = torch.arange(pages_per_seq, device=dev, dtype=torch.int32)
-    plan_dense = fmha_ppu_plan(
+    plan_dense = fmha_sail_plan(
         qo_segment_lens_d, kv_segment_lens_d, num_qo_heads_dense,
         causal=True, page_size=page_size,
         output_maxscore=True,
     )
-    _, max_score = fmha_ppu(
+    _, max_score = fmha_sail(
         q_dense, k_pages_dense, v_pages_dense, plan_dense,
         sm_scale=1.0 / math.sqrt(head_dim), kv_indices=kv_indices_d,
         output_o=False, output_maxscore=True,
@@ -142,13 +142,13 @@ def run(check=False, seed=0,
         dtype=torch.int32,
     )
     kv_indices_s = kv_indices_d.repeat(total_qo_len)
-    plan_sparse = fmha_ppu_plan(
+    plan_sparse = fmha_sail_plan(
         qo_segment_lens_s, kv_segment_lens_s, num_qo_heads_real,
         causal=True, qo_offset=qo_offset_s,
         page_size=page_size, kv_block_num=topk,
         num_kv_heads=num_kv_heads_real,
     )
-    o, _ = fmha_ppu(
+    o, _ = fmha_sail(
         q_real, k_pages_real, v_pages_real, plan_sparse,
         sm_scale=1.0 / math.sqrt(head_dim), kv_indices=kv_indices_s,
         kv_block_indexes=kv_block_indexes, check_input_valid=True,

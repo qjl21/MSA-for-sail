@@ -5,7 +5,7 @@
 #define COMPATIBLE_WRAPPER_H
 
 /*
- * compatible_wrapper.h — sailify compat layer for the fmha_ppu PPU build
+ * compatible_wrapper.h — sailify compat layer for the msa_for_sail PPU build
  *
  * Force-included by jit.py into every hgcc translation unit.  Trimmed to
  * exactly what the converted sources consume:

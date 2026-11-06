@@ -16,8 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from conftest import fp8_test_dtypes
-from fmha_ppu import fmha_ppu
-from fmha_ppu import fmha_ppu_plan
+from msa_for_sail import fmha_sail
+from msa_for_sail import fmha_sail_plan
 
 failed_cases = []
 
@@ -89,7 +89,7 @@ def run_sparse_flashinfer(q, k_pages, v_pages, qo_lens_list, original_kv_lens_li
     qo_segment_lens = torch.tensor(qo_lens_list, dtype=torch.int32)
     kv_segment_lens = torch.tensor(original_kv_lens_list, dtype=torch.int32)
     qo_offset_tensor = torch.tensor(qo_offsets_list, dtype=torch.int32)
-    plan_info = fmha_ppu_plan(qo_segment_lens, kv_segment_lens,
+    plan_info = fmha_sail_plan(qo_segment_lens, kv_segment_lens,
         num_qo_heads, qo_offset=qo_offset_tensor,
         page_size=page_size,
         num_kv_splits=num_kv_splits, kv_block_num=kv_block_num,
@@ -97,7 +97,7 @@ def run_sparse_flashinfer(q, k_pages, v_pages, qo_lens_list, original_kv_lens_li
         use_fp8_kvcache=(dtype == torch.float8_e4m3fn),
     )
     torch.cuda.synchronize()
-    out, _ = fmha_ppu(
+    out, _ = fmha_sail(
         q, k_pages, v_pages,
         plan_info=plan_info, sm_scale=1.0 / math.sqrt(head_dim), 
         kv_indices=kv_indices,

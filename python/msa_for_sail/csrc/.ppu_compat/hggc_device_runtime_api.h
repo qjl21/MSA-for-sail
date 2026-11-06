@@ -5,6 +5,6 @@
 #define HGGC_DEVICE_RUNTIME_API_H
 
 /* TODO: device-side runtime APIs (graph node update, PDL, device launch)
- * are not supported on PPU; no fmha_ppu source uses them. */
+ * are not supported on PPU; no msa_for_sail source uses them. */
 
 #endif

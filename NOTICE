@@ -1,4 +1,4 @@
-fmha_ppu
+msa_for_sail
 Copyright (c) 2026 MiniMax
 Copyright (c) 2026 T-Head (Shanghai) Semiconductor Co., Ltd.
 
@@ -67,8 +67,8 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 
 Project:    https://github.com/t-head/actlize (forked from NVIDIA/cutlass)
-Where:      python/fmha_ppu/actlize/ (git submodule: include/ only)
-Full text:  python/fmha_ppu/actlize/LICENSE.txt (submodule), or
+Where:      python/msa_for_sail/actlize/ (git submodule: include/ only)
+Full text:  python/msa_for_sail/actlize/LICENSE.txt (submodule), or
             https://github.com/t-head/actlize/blob/v1.0.0/LICENSE.txt
 
 --------------------------------------------------------------------------------
@@ -78,7 +78,7 @@ Vendored CUTLASS-derived headers under csrc — BSD-3-Clause
 Copyright (c) 2023 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 Copyright (c) 2024 - 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
-Where:      python/fmha_ppu/csrc/include/: `pow_2.hpp` and
+Where:      python/msa_for_sail/csrc/include/: `pow_2.hpp` and
             `gather_tensor.hpp` carry Copyright (c) 2023 - 2025;
             `fmha.hpp`, `fmha_common.hpp`, `fmha_fusion.hpp`,
             `fmha_options.hpp` and `fmha_tile_scheduler.hpp` carry
@@ -111,8 +111,8 @@ limitations under the License.
 Project:    https://github.com/flashinfer-ai/flashinfer
             (sources match the flashinfer v0.6.8.post1 lineage; `plan.cuh`
             is from a later upstream revision)
-Where:      Apache-2.0-tagged sources under python/fmha_ppu/csrc/ and
-            python/fmha_ppu/csrc/include/: `allocator.h`, `exception.h`,
+Where:      Apache-2.0-tagged sources under python/msa_for_sail/csrc/ and
+            python/msa_for_sail/csrc/include/: `allocator.h`, `exception.h`,
             `mask.cuh` (unmodified), and `vec_dtypes.cuh`,
             `cutlass_utils.cuh`, `utils.cuh`, `plan.cuh`,
             `sparse_topk_select.cuh`, `tvm_ffi_utils.h`,
@@ -142,7 +142,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 Project:    https://github.com/NVIDIA/TensorRT-LLM
-Where:      Portions of python/fmha_ppu/csrc/include/sparse_topk_select.cuh
+Where:      Portions of python/msa_for_sail/csrc/include/sparse_topk_select.cuh
             — indexerTopK histogram-step + insertion-sort algorithm,
             derived from tensorrt_llm/cpp/tensorrt_llm/kernels/indexerTopK.cu.
 Full text:  THIRD-PARTY-NOTICES (Apache License 2.0), or
@@ -159,7 +159,7 @@ License at https://www.apache.org/licenses/LICENSE-2.0
 
 Project:    https://github.com/NAVER-CLOVA
 Where:      Co-authored portions of
-            python/fmha_ppu/csrc/include/sparse_topk_select.cuh
+            python/msa_for_sail/csrc/include/sparse_topk_select.cuh
             (indexerTopK algorithm, alongside the NVIDIA copyright above).
 Full text:  THIRD-PARTY-NOTICES (Apache License 2.0), or
             https://www.apache.org/licenses/LICENSE-2.0

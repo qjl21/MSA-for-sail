@@ -2,7 +2,7 @@
 
 ## [0.1.1+v0.1.0] - 2026-11
 
-Alpha release of MSA (MiniMax Sparse Attention), the `fmha_ppu` package for
+Alpha release of MSA (MiniMax Sparse Attention), the `msa_for_sail` package for
 PPU (HGGC). Provides dense FlashAttention and sparse top-k attention through
 a single JIT-compiled `csrc` stack.
 
@@ -13,7 +13,7 @@ a single JIT-compiled `csrc` stack.
 - Sparse attention: proxy pass with per-block max score, `sparse_topk_select`
   indexer producing top-k KV block indexes, and sparse prefill/decode over
   `kv_block_indexes`.
-- Public API: `fmha_ppu_plan`, `fmha_ppu`, `sparse_topk_select`, plus
+- Public API: `fmha_sail_plan`, `fmha_sail`, `sparse_topk_select`, plus
   `allocate_graph_workspace`; also registered as `minfer.ops.*` TVM FFI globals.
 - Kernels JIT-compiled at first import from `csrc` Jinja templates with
   `hgcc` + `ninja`; ACTLIZE submodule pinned to v1.0.0 (`664f5c19`).

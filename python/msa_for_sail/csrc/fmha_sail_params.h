@@ -7,7 +7,7 @@
 #include <cstdint>
 #include "gmem_bounds_check.h"
 
-struct FMHACutlassPPUParams {
+struct FMHACutlassSailParams {
   void* workspace_buffer_ptr;
   void* q_ptr;
   void* k_ptr;
@@ -76,7 +76,7 @@ struct FMHACutlassPPUParams {
   GMEM_BOUNDS_FIELD
 };
 
-using FMHAVariantFn = hggcError_t (*)(const FMHACutlassPPUParams&);
+using FMHAVariantFn = hggcError_t (*)(const FMHACutlassSailParams&);
 
 hggcError_t fmha_reduction_bf16(const void* ptr_O_partial, void* ptr_O,
                                 const float* ptr_lse,

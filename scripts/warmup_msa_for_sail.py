@@ -6,9 +6,9 @@
 """Pre-compile all FMHA PPU kernel variants with a single ninja build.
 
 Usage:
-    python3 scripts/warmup_fmha_ppu.py          # Compile all with max parallelism
-    python3 scripts/warmup_fmha_ppu.py -j 64    # Limit to 64 parallel compilations
-    python3 scripts/warmup_fmha_ppu.py --clear   # Clear cache first, then compile all
+    python3 scripts/warmup_msa_for_sail.py          # Compile all with max parallelism
+    python3 scripts/warmup_msa_for_sail.py -j 64    # Limit to 64 parallel compilations
+    python3 scripts/warmup_msa_for_sail.py --clear   # Clear cache first, then compile all
 """
 
 import argparse
@@ -23,11 +23,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
-from fmha_ppu.jit import _FMHA_PPU_DISPATCH, _FMHA_PPU_IMPOSSIBLE, _get_hgcc_flags
+from msa_for_sail.jit import _MSA_SAIL_DISPATCH, _MSA_SAIL_IMPOSSIBLE, _get_hgcc_flags
 
 def enumerate_all_variants():
 
-    dims = _FMHA_PPU_DISPATCH
+    dims = _MSA_SAIL_DISPATCH
     all_values = [values for _, values in dims]
 
     variants = []
@@ -35,12 +35,12 @@ def enumerate_all_variants():
         params = {}
         for _, template_params in combo:
             params.update(template_params)
-        if _FMHA_PPU_IMPOSSIBLE(params):
+        if _MSA_SAIL_IMPOSSIBLE(params):
             continue
         indices = [values.index(val) for (_, values), val in zip(dims, combo)]
         variant_name = "_".join(str(i) for i in indices)
         variant = dict(params)
-        variant["func_name"] = "fmha_ppu_" + variant_name
+        variant["func_name"] = "msa_for_sail_" + variant_name
         variant["variant_name"] = variant_name
         variants.append(variant)
 
@@ -94,7 +94,7 @@ def main():
 
     if args.all:
         args.clear = True
-    from fmha_ppu.jit import (
+    from msa_for_sail.jit import (
         CACHE_BASE, _FMHA_VARLEN_DIR, _get_compiler, _get_link_libs,
     )
     import jinja2
@@ -158,11 +158,11 @@ def main():
 
     with open(_FMHA_VARLEN_DIR / "fmha_sm80_inst.jinja") as f:
         inst_template = jinja2.Template(f.read())
-    with open(_FMHA_VARLEN_DIR / "fmha_ppu_variant_run.cu.jinja") as f:
+    with open(_FMHA_VARLEN_DIR / "fmha_sail_variant_run.cu.jinja") as f:
         run_template = jinja2.Template(f.read())
 
     # Copy shared headers
-    for name in ["fmha_ppu_params.h", "msa_profiling_interface.hpp",
+    for name in ["fmha_sail_params.h", "msa_profiling_interface.hpp",
                  "tvm_ffi_utils.h", "gmem_bounds_check.h"]:
         shutil.copy2(_FMHA_VARLEN_DIR / name, build_dir / name)
 

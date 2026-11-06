@@ -5,7 +5,7 @@
 
     KV cache A (proxy, MQA-compressed)
         ↓
-    fmha_ppu dense (num_kv_heads=1) → max_score
+    fmha_sail dense (num_kv_heads=1) → max_score
 """
 import argparse
 import math
@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from conftest import fp8_test_dtypes
-from fmha_ppu import fmha_ppu, fmha_ppu_plan, sparse_topk_select
+from msa_for_sail import fmha_sail, fmha_sail_plan, sparse_topk_select
 
 
 def quantize_qkv(x, storage_dtype):
@@ -133,13 +133,13 @@ def run(check=False, seed=0,
     qo_segment_lens_d = torch.tensor([total_qo_len], dtype=torch.int32)
     kv_segment_lens_d = torch.tensor([kv_len], dtype=torch.int32)
     kv_indices_d = torch.arange(pages_per_seq, device=dev, dtype=torch.int32)
-    plan_dense = fmha_ppu_plan(
+    plan_dense = fmha_sail_plan(
         qo_segment_lens_d, kv_segment_lens_d, num_qo_heads_dense,
         num_kv_splits=num_kv_splits,
         causal=True, page_size=page_size,
         output_maxscore=True,
     )
-    _, max_score = fmha_ppu(
+    _, max_score = fmha_sail(
         q_dense, k_pages_dense, v_pages_dense, plan_dense,
         sm_scale=1.0 / math.sqrt(head_dim), kv_indices=kv_indices_d,
         output_o=False, output_maxscore=True,
@@ -186,7 +186,7 @@ def run(check=False, seed=0,
         # outputs must agree within bf16 rounding (and on -inf positions).
         other_dtype = (torch.bfloat16 if ms_dtype == torch.float32
                        else torch.float32)
-        _, max_score_other = fmha_ppu(
+        _, max_score_other = fmha_sail(
             q_dense, k_pages_dense, v_pages_dense, plan_dense,
             sm_scale=1.0 / math.sqrt(head_dim), kv_indices=kv_indices_d,
             output_o=False, output_maxscore=True,
