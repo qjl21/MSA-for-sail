@@ -1,4 +1,4 @@
-name: msa release     # Build the fmha_ppu wheel and publish it via the shared release template
+name: msa release     # Build the msa_for_sail wheel and publish it via the shared release template
 
 # Call the standalone template repository matrix-release; `uses` and `template_ref`
 # must reference the same version. The template composes the SAIL build image from the
@@ -7,7 +7,7 @@ name: msa release     # Build the fmha_ppu wheel and publish it via the shared r
 # template) as Actions secrets in this repository or at the org level with access granted here.
 on:
   # Trigger automatically on release tags, or manually with the parameters below.
-  # MSA release tags look like `0.1.1+v0.1.0` (FMHA_PPU_VERSION+RELEASE_VERSION in setup.py),
+  # MSA release tags look like `0.1.1+v0.1.0` (MSA_SAIL_VERSION+RELEASE_VERSION in setup.py),
   # and setup.py matches that exact tag via git describe to compose the wheel version.
   push:
     tags: ['*\+v*']

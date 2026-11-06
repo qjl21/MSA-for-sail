@@ -37,9 +37,9 @@ def collect_env_info(docker_image):
     try:
         from importlib.metadata import version
 
-        info["fmha_ppu_version"] = version("fmha_ppu")
+        info["msa_for_sail_version"] = version("msa_for_sail")
     except Exception:
-        info["fmha_ppu_version"] = "not found"
+        info["msa_for_sail_version"] = "not found"
     return info
 
 
